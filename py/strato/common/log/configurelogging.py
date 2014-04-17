@@ -16,7 +16,7 @@ def logFilename(name):
 
 def configureLogging(name, forceDirectory=None):
     if forceDirectory is not None:
-        os.environ['STRATO_CONFIG_LOGGING'] = os.environ.get('STRATO_CONFIG_LOGGING') + \
+        os.environ['STRATO_CONFIG_LOGGING'] = os.environ.get('STRATO_CONFIG_LOGGING', '') + \
             'LOGS_DIRECTORY = "%s"' % os.path.join(os.getcwd(), forceDirectory)
         config.LOGS_DIRECTORY = forceDirectory
     _configureOutputToScreen(logging.getLogger())
