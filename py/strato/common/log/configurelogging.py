@@ -14,7 +14,11 @@ def logFilename(name):
     return '%s/%s%s' % (config.LOGS_DIRECTORY, name, config.LOGS_SUFFIX)
 
 
-def configureLogging(name):
+def configureLogging(name, forceDirectory=None):
+    if forceDirectory is not None:
+        os.environ['STRATO_CONFIG_LOGGING'] = os.environ.get('STRATO_CONFIG_LOGGING') + \
+            'LOGS_DIRECTORY = "%s"' % os.path.join(os.getcwd(), forceDirectory)
+        config.LOGS_DIRECTORY = forceDirectory
     _configureOutputToScreen(logging.getLogger())
     _configureOutputToFile(logging.getLogger(), name)
     _configureLogLevels()
