@@ -23,7 +23,7 @@ class Formatter:
         self._clock = self._relativeClock if relativeTime else self._absoluteClock
         self._relativeClockFormat = "%.6f" if microsecondPrecision else "%.3f"
         self._minimumLevel = logging.INFO if noDebug else logging.DEBUG
-        useColors = False if noColors else os.system("stty > /dev/null 2>&1") == 0
+        useColors = False if noColors else _runningInATerminal()
         self._logFormat = \
             "%(log2text_clock)s " + \
             ('%(process)s%(threadName)s:' if withThreads else '') + \
@@ -62,6 +62,10 @@ class Formatter:
         return time.strftime(TIME_FORMAT, time.gmtime(created))
 
 
+def _runningInATerminal():
+    return sys.stdout.isatty()
+
+
 class NonStopableIterator:
     def __init__(self, logFile):
         self.logFile = logFile
@@ -97,6 +101,8 @@ if __name__ == "__main__":
     parser.add_argument("--relativeTime", action='store_true', help='print relative time, not absolute')
     parser.add_argument("--noColors", action='store_true', help='force monochromatic output even on a TTY')
     parser.add_argument(
+        "--noLess", action="store_true", help='Do not pipe into less even when running in a TTY')
+    parser.add_argument(
         "--microsecondPrecision", action="store_true",
         help='print times in microsecond precision (instead of millisecond percision)')
     parser.add_argument(
@@ -105,6 +111,13 @@ if __name__ == "__main__":
     parser.add_argument("--withThreads", action="store_true", help='print process and thread name')
     parser.add_argument("-f", "--follow", action="store_true", help='follow file forever', default=False)
     args = parser.parse_args()
+
+    if _runningInATerminal and not args.noLess:
+        args = " ".join(["'%s'" % a for a in sys.argv[1:]])
+        result = os.system(
+            "python -m strato.common.log.log2text %s --noLess | less --quit-if-one-screen" % args)
+        sys.exit(result)
+
     formatter = Formatter(
         noDebug=args.noDebug, relativeTime=args.relativeTime, noColors=args.noColors,
         microsecondPrecision=args.microsecondPrecision, showFullPaths=args.showFullPaths,
