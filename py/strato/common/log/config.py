@@ -3,7 +3,7 @@ import os
 LOGS_DIRECTORY = os.environ.get('STRATO_LOGS_DIRECTORY', None)
 if LOGS_DIRECTORY is None:
     LOGS_DIRECTORY = os.path.join(os.environ['HOME'], "tmp", "stratoscalelogs")
-LOGS_SUFFIX = ".log"
+LOGS_SUFFIX = ".stratolog"
 LOG_CONFIGURATION = os.environ.get('STRATO_LOGS_CONFIGURATION_FILE', None)
 
 DEFAULT_LOG_CONFIGURATION = {
