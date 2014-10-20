@@ -25,19 +25,13 @@ def tempDir():
     return _tempDir
 
 
-_PROGRAM = """
-from strato.common.log import configurelogging
-configurelogging.configureLogging('fakeuser')
-import logging
-logging.info("dict %%(here)s", dict(here='there'))
-logging.info('%(message)s')
-"""
+def readLogContents(logName):
+    return open(os.path.join(_tempDir, '%s.stratolog' % logName)).read()
 
 
 class FakeUser:
-    def __init__(self, message):
+    def __init__(self, program):
         assert _tempDir is not None
-        program = _PROGRAM % dict(message=message)
         try:
             self._output = subprocess.check_output(
                 ['python', '-c', program], stderr=subprocess.STDOUT, close_fds=True,
@@ -48,6 +42,3 @@ class FakeUser:
 
     def output(self):
         return self._output
-
-    def readLogContents(self):
-        return open(os.path.join(_tempDir, 'fakeuser.log')).read()

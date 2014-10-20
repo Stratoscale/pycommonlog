@@ -10,11 +10,23 @@ import json
 import subprocess
 
 
+_name = None
+
+
 def logFilename(name):
     return '%s/%s%s' % (config.LOGS_DIRECTORY, name, config.LOGS_SUFFIX)
 
 
 def configureLogging(name, forceDirectory=None):
+    """
+    This is the 'setUp' function for logging. Should be called once, as early as possible
+    (a good idea is to call this even before 'import' statements).
+    Note: control over the logging level should be by way of STRATO_LOGS_CONFIGURATION_FILE
+    environment variable, which should point to a json text file with the "dict config"
+    for the loggers (look at python logging documentation for details, or example in config.py)
+    """
+    global _name
+    _name = name
     if forceDirectory is not None:
         os.environ['STRATO_CONFIG_LOGGING'] = os.environ.get('STRATO_CONFIG_LOGGING', '') + \
             '\nLOGS_DIRECTORY = "%s"\n' % os.path.join(os.getcwd(), forceDirectory)
@@ -25,6 +37,23 @@ def configureLogging(name, forceDirectory=None):
     hostname = subprocess.check_output('/usr/bin/hostname').strip()
     logging.info("Logging started for '%(name)s' on '%(hostname)s'", dict(
         name=name, hostname=hostname))
+
+
+def configureLogger(loggerName):
+    """
+    The purpose of this function is to setup a non-root logger.
+    This function should be called only after configureLogging has already been called.
+    Note: control over the logging level should be by way of STRATO_LOGS_CONFIGURATION_FILE
+    environment variable, which should point to a json text file with the "dict config"
+    for the loggers (look at python logging documentation for details, or example in config.py)
+    """
+    assert loggerName is not None
+    global _name
+    assert _name is not None, "configureLogging must be called first, before any call to 'configureLogger'"
+    logging.getLogger(loggerName).propagate = False
+    _configureOutputToScreen(logging.getLogger(loggerName))
+    outputFilename = "%s__%s" % (_name, loggerName)
+    _configureOutputToFile(logging.getLogger(loggerName), outputFilename)
 
 
 def addFileHandler(name, path):
