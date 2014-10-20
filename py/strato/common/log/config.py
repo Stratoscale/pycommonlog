@@ -1,4 +1,5 @@
 import os
+from strato.common.log import environment
 
 LOGS_DIRECTORY = os.environ.get('STRATO_LOGS_DIRECTORY', None)
 if LOGS_DIRECTORY is None:
@@ -6,12 +7,13 @@ if LOGS_DIRECTORY is None:
 LOGS_SUFFIX = ".stratolog"
 LOG_CONFIGURATION = os.environ.get('STRATO_LOGS_CONFIGURATION_FILE', None)
 
+DEFAULT_CONSOLE_LEVEL = "ERROR" if environment.guessIfRunningAsAService() else "DEBUG"
 DEFAULT_LOG_CONFIGURATION = {
     "handlers":
     {
         "console":
         {
-            "level": "DEBUG"
+            "level": DEFAULT_CONSOLE_LEVEL
         },
         "file":
         {
