@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <title>Stratoscale, Tests Report</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="description" content="">
+        <meta name="author" content="">
+
+        <!-- Le styles -->
+        <link href="bootstrap/css/bootstrap.css" rel="stylesheet">
+        <style type="text/css">
+            body {
+                padding-top: 60px;
+                padding-bottom: 40px;
+                font-size:120%;
+            }
+            .subdir {
+                font-weight: bold;
+            }
+            .filetype {
+                color: grey;
+            }
+            .message_DEBUG {
+                color: #505050;
+            }
+            .message_INFO {
+            }
+            .message_PROGRESS {
+                color: blue;
+            }
+            .message_SUCCESS {
+                color: green;
+            }
+            .message_WARNING {
+                color: #FF6633;
+            }
+            .message_ERROR {
+                color: red;
+            }
+            .message_CRITICAL {
+                color: red;
+            }
+            .message_EXCEPTION {
+                color: red;
+            }
+            .message_IMESX {
+                color: magenta;
+            }
+            th {
+                padding-left: 8px;
+                padding-right: 8px;
+            }
+            td {
+                padding-left: 8px;
+                padding-right: 8px;
+            }
+            .reporterScreen {
+                margin-left: 30px;
+                margin-right: 30px;
+            }
+            .headerContainer {
+                margin-left: 30px;
+                margin-right: 30px;
+            }
+            .testFailureMessage {
+                background-color: #fcc;
+            }
+        </style>
+        <link href="bootstrap/css/bootstrap-theme.css" rel="stylesheet">
+
+        <!-- HTML5 shim, for IE6-8 support of HTML5 elements -->
+        <!--[if lt IE 9]>
+        <script src="/externals/bootstrap/js/html5shiv.js"></script>
+        <![endif]-->
+    </head>
+
+    <body>
+        <div class="navbar navbar-inverse navbar-fixed-top" role="navigation">
+            <div class="navbar-header">
+                <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-collapse">
+                    <span class="sr-only">Toggle navigation</span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                </button>
+                <a class="navbar-brand" href="#">Test Reporter</a>
+            </div>
+            <div class="collapse navbar-collapse">
+                <ul class="nav navbar-nav">
+                    <!-- ko if: failedTest -->
+                        <li><a href="#" data-bind="click: showError">Show Error</a></li>
+                    <!-- /ko -->
+                    <!-- ko if: pngs().length > 0 -->
+                        <li class="dropdown">
+                            <a href="#" class="dropdown-toggle" data-toggle="dropdown">Screen Captures<b class="caret"></b></a>
+                            <ul class="dropdown-menu" data-bind="foreach: pngs">
+                                <li><a href="#" data-bind="text: name, click: openTab"></a></li>
+                            </ul>
+                        </li>
+                    <!-- /ko -->
+                    <!-- ko if: txts().length > 0 -->
+                        <li class="dropdown">
+                            <a href="#" class="dropdown-toggle" data-toggle="dropdown">Text Files<b class="caret"></b></a>
+                            <ul class="dropdown-menu" data-bind="foreach: txts">
+                                <li><a href="#" data-bind="text: name, click: openTab"></a></li>
+                            </ul>
+                        </li>
+                    <!-- /ko -->
+                    <!-- ko if: subdirs().length > 0 -->
+                        <li class="dropdown">
+                            <a href="#" class="dropdown-toggle" data-toggle="dropdown">Subdirectories<b class="caret"></b></a>
+                            <ul class="dropdown-menu" data-bind="foreach: subdirs">
+                                <li><a href="#" data-bind="text: name, click: openTab"></a></li>
+                            </ul>
+                        </li>
+                    <!-- /ko -->
+                </ul>
+            </div><!--/.nav-collapse -->
+        </div>
+
+        <div>
+            <div class="reporterScreen">
+
+                <div>
+                    <ul class="nav nav-pills" style="display: inline" data-bind="foreach: logCombination.columns">
+                        <li data-bind="css: { active: enabled }, click: toggle"><a href="#" data-bind="text: name"></a></li>
+                    </ul>
+                </div>
+                <div>
+                    <ul class="nav nav-pills" style="display: inline" data-bind="foreach: logCombination.levels">
+                        <li data-bind="css: { active: enabled }, click: toggle"><a href="#" data-bind="text: name"></a></li>
+                    </ul>
+                </div>
+                <ul class="nav nav-pills nav-stacked">
+                    <table cellspacing="20">
+                        <thead align = "left">
+                            <tr data-bind="foreach: logCombination.columns">
+                                <!-- ko if: enabled -->
+                                    <th data-bind="text: name"></th>
+                                <!-- /ko -->
+                            </tr>
+                        </thead>
+                        <tbody id="logLines">
+                        </tbody>
+                    </table>
+                </ul>
+
+
+
+                <h2><input type="checkbox" data-bind="checked: showTree"/>Show Tree</h2>
+                <div data-bind="if: showTree">
+                    <div data-bind="template: { name: 'subdirTemplate', data: rootDirectoryObject }">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script type="text/html" id="subdirTemplate">
+<ul>
+    <!-- ko foreach: subdirs-->
+       <li>
+           <input type="checkbox" data-bind="checked: checked"/>
+           <span class="subdir" data-bind="text: basename"></span>
+           <!-- ko if: checked -->
+               <span data-bind="template: { name: 'subdirTemplate' }"></span>
+           <!-- /ko -->
+       </li>
+    <!-- /ko -->
+    <!-- ko foreach: files -->
+       <li>
+           <input type="checkbox" data-bind="checked: checked"/>
+           <span data-bind="text: basename"></span>
+           <span class="filetype" data-bind="text: fileType"></span>
+       </li>
+    <!-- /ko -->
+</ul>
+        </script>
+
+        <!-- Le javascript
+        ================================================== -->
+        <!-- Placed at the end of the document so the pages load faster -->
+        <script src="externals/jquery-2.0.3.min.js"></script>
+        <script src="externals/knockout-3.0.0.js"></script>
+        <script src="bootstrap/js/bootstrap.min.js"></script>
+        <script src="parsedirectory.js"></script>
+        <script src="stringutils.js"></script>
+        <script src="stratologfile.js"></script>
+        <script src="openstacklogfile.js"></script>
+        <script src="imesxlogfile.js"></script>
+        <script src="multiformatlog.js"></script>
+        <script src="logcombinationmodel.js"></script>
+        <script src="logdirmodel.js"></script>
+        <script>
+            var model = new LogDirModel();
+            ko.applyBindings( model );
+            $(function(){ model.load(); });
+        </script>
+    </body>
+</html>
