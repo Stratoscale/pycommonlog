@@ -34,7 +34,10 @@ def configureLogging(name, forceDirectory=None):
     _configureOutputToScreen(logging.getLogger())
     _configureOutputToFile(logging.getLogger(), name)
     _configureLogLevels()
-    hostname = subprocess.check_output('/usr/bin/hostname').strip()
+    if os.path.exists('/usr/bin/hostname'):
+        hostname = subprocess.check_output('/usr/bin/hostname').strip()
+    else:
+        hostname = subprocess.check_output('/bin/hostname').strip()
     logging.info("Logging started for '%(name)s' on '%(hostname)s'", dict(
         name=name, hostname=hostname))
 
