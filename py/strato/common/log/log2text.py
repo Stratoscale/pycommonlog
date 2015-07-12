@@ -66,22 +66,19 @@ def _runningInATerminal():
     return sys.stdout.isatty()
 
 
-class NonStopableIterator:
-    def __init__(self, logFile):
-        self.logFile = logFile
-
-    def next(self):
-        while True:
-            newLine = self.logFile.readline()
-            if newLine:
-                yield newLine
-            time.sleep(0.5)
+def follow_generator(istream):
+    while True:
+        newLine = istream.readline()
+        if newLine:
+            yield newLine
+            continue
+        time.sleep(0.1)
 
 
 def printLog(logFile, formatter, follow):
     inputStream = sys.stdin if logFile == "-" else open(logFile)
     if follow:
-        inputStream = NonStopableIterator(inputStream)
+        inputStream = follow_generator(inputStream)
     for line in inputStream:
         try:
             obj = json.loads(line)
