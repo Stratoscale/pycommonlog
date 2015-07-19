@@ -8,7 +8,7 @@ import sys
 import atexit
 import json
 import subprocess
-
+import signal
 
 _name = None
 
@@ -33,11 +33,12 @@ def configureLogging(name, forceDirectory=None):
         config.LOGS_DIRECTORY = forceDirectory
     _configureOutputToScreen(logging.getLogger())
     _configureOutputToFile(logging.getLogger(), name)
-    _configureLogLevels()
+    _configureLogLevels(name)
     if os.path.exists('/usr/bin/hostname'):
         hostname = subprocess.check_output('/usr/bin/hostname').strip()
     else:
         hostname = subprocess.check_output('/bin/hostname').strip()
+    _configureLoggingSignalHandlers()
     logging.info("Logging started for '%(name)s' on '%(hostname)s'", dict(
         name=name, hostname=hostname))
 
@@ -119,11 +120,37 @@ def _configureOutputToFile(logger, logName):
     logger.addHandler(handler)
     logger.findCaller = _findCaller
 
-
-def _configureLogLevels():
+def _configureLogLevels(name):
     if config.LOG_CONFIGURATION is not None:
         with open(config.LOG_CONFIGURATION, 'rt') as f:
             dictConfig = json.load(f)
     else:
         dictConfig = config.DEFAULT_LOG_CONFIGURATION
+    if os.path.exists(config.LOGS_CONFIGURATION_OVERRIDE_FILE):
+        with open(config.LOGS_CONFIGURATION_OVERRIDE_FILE, 'rt') as f:
+            overrides = json.load(f)
+        default_overrides = overrides.get('default_log_overrides', {})
+        dictConfig.update(default_overrides)
+        dictConfig.update(overrides.get(name, {}))
     logging.config.dictConfig(dictConfig)
+
+def _reloadLoggingConfiguration(signal, stackFrame):
+    global _name
+    if _name is not None:
+        _configureLogLevels(_name)
+
+def _getMultipleFuncsHandler(funcs):
+    def _multipleFuncsHandler(signalNumber, stackFrame):
+        for func in funcs:
+            func(signalNumber, stackFrame)
+    return _multipleFuncsHandler
+
+def _configureLoggingSignalHandlers():
+    currentHandler = signal.getsignal(config.UPDATE_LOGGING_CONFIGURATION_SIGNAL)
+    if currentHandler in [signal.SIG_IGN, signal.SIG_DFL, None]:
+        # No handler for SIGHUP defined yet
+        newHandler = _reloadLoggingConfiguration
+    else:
+        # A different handler was defined, call both handler on SIGHUP
+        newHandler = _getMultipleFuncsHandler([_currentHandler, _reloadLoggingConfiguration])
+    signal.signal(signal.SIGHUP, newHandler)
