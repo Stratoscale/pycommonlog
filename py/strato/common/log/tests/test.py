@@ -97,12 +97,12 @@ class Test(unittest.TestCase):
             """    json.dump(firstConfig, fd)""",
             """from strato.common.log import configurelogging""",
             """configurelogging.configureLogging('mainlog')""",
-            # """configurelogging.configureLogger('sub.logger')""",
+            """configurelogging.configureLogger('sub.logger')""",
             """import logging""",
             """logging.info('write this message')""",
             """logging.error('root error message')""",
-            # """logging.getLogger('sub.logger').info('sub message')""",
-            # """logging.getLogger('sub.logger').error('sub error message')""",
+            """logging.getLogger('sub.logger').info('sub message')""",
+            """logging.getLogger('sub.logger').error('sub error message')""",
             """secondConfig = {'mainlog': {'loggers': {'sub.logger': {'level': 'WARNING', 'propagate' : False}},"""\
             """'handlers': {'console': {'level': 'INFO'}, 'file': {'level': 'INFO'}}, 'root': {'level': 'INFO'}, 'incremental' : True}}""",
             """with open(strato.common.log.config.LOGS_CONFIGURATION_OVERRIDE_FILE, 'wt') as fd:""",
@@ -112,8 +112,8 @@ class Test(unittest.TestCase):
             """os.kill(os.getpid(), strato.common.log.config.UPDATE_LOGGING_CONFIGURATION_SIGNAL)""",
             """logging.getLogger().info('message after config change')""",
             """logging.error('root error after config change')""",
-            # """logging.getLogger('sub.logger').info('sub after config change')""",
-            # """logging.getLogger('sub.logger').error('sub error after config change')""",
+            """logging.getLogger('sub.logger').info('sub after config change')""",
+            """logging.getLogger('sub.logger').error('sub error after config change')""",
             ""])
 
         user = fakeuser.FakeUser(PROGRAM)
@@ -121,19 +121,19 @@ class Test(unittest.TestCase):
         self.assertTrue('write this message' in fakeuser.readLogContents('mainlog'))
         self.assertTrue('root error message' in user.output())
         self.assertTrue('root error message' in fakeuser.readLogContents('mainlog'))
-        # self.assertTrue('sub message' in user.output())
-        # self.assertTrue('sub message' in fakeuser.readLogContents('mainlog__sub.logger'))
-        # self.assertTrue('sub error message' in user.output())
-        # self.assertTrue('sub error message' in fakeuser.readLogContents('mainlog__sub.logger'))
+        self.assertTrue('sub message' in user.output())
+        self.assertTrue('sub message' in fakeuser.readLogContents('mainlog__sub.logger'))
+        self.assertTrue('sub error message' in user.output())
+        self.assertTrue('sub error message' in fakeuser.readLogContents('mainlog__sub.logger'))
 
         self.assertTrue('message after config change' in user.output())
         self.assertTrue('message after config change' in fakeuser.readLogContents('mainlog'))
         self.assertTrue('root error after config change' in user.output())
         self.assertTrue('root error after config change' in fakeuser.readLogContents('mainlog'))
-        # self.assertTrue('sub after config change' not in user.output())
-        # self.assertTrue('sub after config change' not in fakeuser.readLogContents('mainlog__sub.logger'))
-        # self.assertTrue('sub error after config change' in user.output())
-        # self.assertTrue('sub error after config change' in fakeuser.readLogContents('mainlog__sub.logger'))
+        self.assertTrue('sub after config change' not in user.output())
+        self.assertTrue('sub after config change' not in fakeuser.readLogContents('mainlog__sub.logger'))
+        self.assertTrue('sub error after config change' in user.output())
+        self.assertTrue('sub error after config change' in fakeuser.readLogContents('mainlog__sub.logger'))
 
 if __name__ == '__main__':
     unittest.main()
