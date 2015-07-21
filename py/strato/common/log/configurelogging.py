@@ -8,7 +8,7 @@ import sys
 import atexit
 import json
 import subprocess
-
+import signal
 
 _name = None
 
@@ -31,13 +31,14 @@ def configureLogging(name, forceDirectory=None):
         os.environ['STRATO_CONFIG_LOGGING'] = os.environ.get('STRATO_CONFIG_LOGGING', '') + \
             '\nLOGS_DIRECTORY = "%s"\n' % os.path.join(os.getcwd(), forceDirectory)
         config.LOGS_DIRECTORY = forceDirectory
-    _configureOutputToScreen(logging.getLogger())
+    _configureOutputToScreen(logging.getLogger(), name)
     _configureOutputToFile(logging.getLogger(), name)
-    _configureLogLevels()
+    _configureLogLevels(name)
     if os.path.exists('/usr/bin/hostname'):
         hostname = subprocess.check_output('/usr/bin/hostname').strip()
     else:
         hostname = subprocess.check_output('/bin/hostname').strip()
+    _configureLoggingSignalHandlers()
     logging.info("Logging started for '%(name)s' on '%(hostname)s'", dict(
         name=name, hostname=hostname))
 
@@ -54,7 +55,7 @@ def configureLogger(loggerName):
     global _name
     assert _name is not None, "configureLogging must be called first, before any call to 'configureLogger'"
     logging.getLogger(loggerName).propagate = False
-    _configureOutputToScreen(logging.getLogger(loggerName))
+    _configureOutputToScreen(logging.getLogger(loggerName), loggerName)
     outputFilename = "%s__%s" % (_name, loggerName)
     _configureOutputToFile(logging.getLogger(loggerName), outputFilename)
 
@@ -92,7 +93,7 @@ def _useColorsForScreenOutput():
     return True
 
 
-def _configureOutputToScreen(logger):
+def _configureOutputToScreen(logger, loggerName):
     if logger.handlers == []:
         streamHandler = logging.StreamHandler()
         if _useColorsForScreenOutput():
@@ -103,7 +104,8 @@ def _configureOutputToScreen(logger):
             streamHandler.setFormatter(logging.Formatter(
                 '%(created).03f(%(process)d%(threadName)s):%(levelname)s:%(message)s '
                 '(%(pathname)s:%(lineno)d)'))
-        streamHandler.set_name("console")
+        handlerName = "console_%s" % loggerName if loggerName != _name else "console"
+        streamHandler.set_name(handlerName)
         streamHandler.setLevel(logging.DEBUG)
         logger.addHandler(streamHandler)
 
@@ -114,16 +116,43 @@ def _configureOutputToFile(logger, logName):
     handler = logging.FileHandler(filename=logFilename(logName))
     atexit.register(handler.close)
     handler.setFormatter(machinereadableformatter.MachineReadableFormatter())
-    handler.set_name("file")
+    handlerName = "file_%s" % logName if logName != _name else "file"
+    handler.set_name(handlerName)
     handler.setLevel(logging.DEBUG)
     logger.addHandler(handler)
     logger.findCaller = _findCaller
 
-
-def _configureLogLevels():
+def _configureLogLevels(name):
     if config.LOG_CONFIGURATION is not None:
         with open(config.LOG_CONFIGURATION, 'rt') as f:
             dictConfig = json.load(f)
     else:
         dictConfig = config.DEFAULT_LOG_CONFIGURATION
+    if os.path.exists(config.LOGS_CONFIGURATION_OVERRIDE_FILE):
+        with open(config.LOGS_CONFIGURATION_OVERRIDE_FILE, 'rt') as f:
+            overrides = json.load(f)
+        default_overrides = overrides.get('default_log_overrides', {})
+        dictConfig.update(default_overrides)
+        dictConfig.update(overrides.get(name, {}))
     logging.config.dictConfig(dictConfig)
+
+def _reloadLoggingConfiguration(signal, stackFrame):
+    global _name
+    if _name is not None:
+        _configureLogLevels(_name)
+
+def _getMultipleFuncsHandler(funcs):
+    def _multipleFuncsHandler(signalNumber, stackFrame):
+        for func in funcs:
+            func(signalNumber, stackFrame)
+    return _multipleFuncsHandler
+
+def _configureLoggingSignalHandlers():
+    currentHandler = signal.getsignal(config.UPDATE_LOGGING_CONFIGURATION_SIGNAL)
+    if currentHandler in [signal.SIG_IGN, signal.SIG_DFL, None]:
+        # No handler for SIGHUP defined yet
+        newHandler = _reloadLoggingConfiguration
+    else:
+        # A different handler was defined, call both handler on SIGHUP
+        newHandler = _getMultipleFuncsHandler([_currentHandler, _reloadLoggingConfiguration])
+    signal.signal(signal.SIGHUP, newHandler)
