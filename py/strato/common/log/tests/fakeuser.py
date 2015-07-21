@@ -34,7 +34,7 @@ class FakeUser:
         assert _tempDir is not None
         try:
             self._output = subprocess.check_output(
-                ['python', '-c', program], stderr=subprocess.STDOUT, close_fds=False,
+                ['python', '-c', program], stderr=subprocess.STDOUT, close_fds=True,
                 env=dict(os.environ, STRATO_CONFIG_LOGGING="LOGS_DIRECTORY='%s'" % _tempDir))
         except subprocess.CalledProcessError as e:
             print e.output

@@ -31,7 +31,7 @@ def configureLogging(name, forceDirectory=None):
         os.environ['STRATO_CONFIG_LOGGING'] = os.environ.get('STRATO_CONFIG_LOGGING', '') + \
             '\nLOGS_DIRECTORY = "%s"\n' % os.path.join(os.getcwd(), forceDirectory)
         config.LOGS_DIRECTORY = forceDirectory
-    _configureOutputToScreen(logging.getLogger())
+    _configureOutputToScreen(logging.getLogger(), name)
     _configureOutputToFile(logging.getLogger(), name)
     _configureLogLevels(name)
     if os.path.exists('/usr/bin/hostname'):
@@ -55,7 +55,7 @@ def configureLogger(loggerName):
     global _name
     assert _name is not None, "configureLogging must be called first, before any call to 'configureLogger'"
     logging.getLogger(loggerName).propagate = False
-    _configureOutputToScreen(logging.getLogger(loggerName))
+    _configureOutputToScreen(logging.getLogger(loggerName), loggerName)
     outputFilename = "%s__%s" % (_name, loggerName)
     _configureOutputToFile(logging.getLogger(loggerName), outputFilename)
 
@@ -93,7 +93,7 @@ def _useColorsForScreenOutput():
     return True
 
 
-def _configureOutputToScreen(logger):
+def _configureOutputToScreen(logger, loggerName):
     if logger.handlers == []:
         streamHandler = logging.StreamHandler()
         if _useColorsForScreenOutput():
@@ -104,7 +104,8 @@ def _configureOutputToScreen(logger):
             streamHandler.setFormatter(logging.Formatter(
                 '%(created).03f(%(process)d%(threadName)s):%(levelname)s:%(message)s '
                 '(%(pathname)s:%(lineno)d)'))
-        streamHandler.set_name("console")
+        handlerName = "console_%s" % loggerName if loggerName != _name else "console"
+        streamHandler.set_name(handlerName)
         streamHandler.setLevel(logging.DEBUG)
         logger.addHandler(streamHandler)
 
@@ -115,7 +116,8 @@ def _configureOutputToFile(logger, logName):
     handler = logging.FileHandler(filename=logFilename(logName))
     atexit.register(handler.close)
     handler.setFormatter(machinereadableformatter.MachineReadableFormatter())
-    handler.set_name("file")
+    handlerName = "file_%s" % logName if logName != _name else "file"
+    handler.set_name(handlerName)
     handler.setLevel(logging.DEBUG)
     logger.addHandler(handler)
     logger.findCaller = _findCaller
