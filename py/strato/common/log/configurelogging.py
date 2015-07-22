@@ -17,7 +17,7 @@ def logFilename(name):
     return '%s/%s%s' % (config.LOGS_DIRECTORY, name, config.LOGS_SUFFIX)
 
 
-def configureLogging(name, forceDirectory=None):
+def configureLogging(name, forceDirectory=None, registerConfigurationReloadSignal=True):
     """
     This is the 'setUp' function for logging. Should be called once, as early as possible
     (a good idea is to call this even before 'import' statements).
@@ -38,7 +38,8 @@ def configureLogging(name, forceDirectory=None):
         hostname = subprocess.check_output('/usr/bin/hostname').strip()
     else:
         hostname = subprocess.check_output('/bin/hostname').strip()
-    _configureLoggingSignalHandlers()
+    if registerConfigurationReloadSignal:
+        _configureLoggingSignalHandlers()
     logging.info("Logging started for '%(name)s' on '%(hostname)s'", dict(
         name=name, hostname=hostname))
 
@@ -139,10 +140,13 @@ def _configureLogLevels(name):
         dictConfig.update(overrides.get(name, {}))
     logging.config.dictConfig(dictConfig)
 
-def _reloadLoggingConfiguration(signal, stackFrame):
+def reloadLoggingConfiguration():
     global _name
     if _name is not None:
         _configureLogLevels(_name)
+
+def _handleLoggingConfigurationSignal(signal, stackFrame):
+    reloadLoggingConfiguration()
 
 def _getMultipleFuncsHandler(funcs):
     def _multipleFuncsHandler(signalNumber, stackFrame):
@@ -154,8 +158,8 @@ def _configureLoggingSignalHandlers():
     currentHandler = signal.getsignal(config.UPDATE_LOGGING_CONFIGURATION_SIGNAL)
     if currentHandler in [signal.SIG_IGN, signal.SIG_DFL, None]:
         # No handler for SIGHUP defined yet
-        newHandler = _reloadLoggingConfiguration
+        newHandler = _handleLoggingConfigurationSignal
     else:
         # A different handler was defined, call both handler on SIGHUP
-        newHandler = _getMultipleFuncsHandler([currentHandler, _reloadLoggingConfiguration])
+        newHandler = _getMultipleFuncsHandler([currentHandler, _handleLoggingConfigurationSignal])
     signal.signal(signal.SIGHUP, newHandler)
