@@ -72,6 +72,11 @@ def addFileHandler(name, path):
     logging.info("Logging started for %s" % name)
 
 
+def changeHandlerLogLevelbyHandlerType(logger, logLevel, handlerType=None):
+    """ if not specifying handlers type (leaving it None) , log level will be changed to all handlers """
+    [handler.setLevel(logLevel) for handler in logger.handlers if not handlerType or type(handler) == handlerType]
+
+
 def _findCaller():
     f = sys._getframe(3)
     while hasattr(f, "f_code"):
