@@ -12,11 +12,13 @@ GREEN = '\033[32m'
 YELLOW = '\033[33m'
 CYAN = '\033[36m'
 NORMAL_COLOR = '\033[39m'
-TIME_FORMAT = "%d/%m/%y-%H:%M:%S"
+TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
 class Formatter:
     _COLORS = {logging.PROGRESS: CYAN, logging.ERROR: RED, logging.WARNING: YELLOW}
+
+    converter = time.gmtime
 
     def __init__(self, relativeTime, withThreads, showFullPaths, noDebug, microsecondPrecision, noColors):
         self._firstClock = None
@@ -59,7 +61,8 @@ class Formatter:
         return self._relativeClockFormat % (created - self._firstClock)
 
     def _absoluteClock(self, created):
-        return time.strftime(TIME_FORMAT, time.gmtime(created))
+        msec = (created - long(created)) * 1000
+        return '%s.%.03d' % (time.strftime(TIME_FORMAT, self.converter(created)), msec)
 
 
 def _runningInATerminal():
