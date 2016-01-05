@@ -20,12 +20,14 @@ class Formatter:
 
     converter = time.gmtime
 
-    def __init__(self, relativeTime, withThreads, showFullPaths, noDebug, microsecondPrecision, noColors):
+    def __init__(self, relativeTime, withThreads, showFullPaths, noDebug, microsecondPrecision, noColors, localTime=False):
         self._firstClock = None
         self._clock = self._relativeClock if relativeTime else self._absoluteClock
         self._relativeClockFormat = "%.6f" if microsecondPrecision else "%.3f"
         self._minimumLevel = logging.INFO if noDebug else logging.DEBUG
         useColors = False if noColors else _runningInATerminal()
+        if localTime:
+            self.converter = time.localtime
         self._logFormat = \
             "%(log2text_clock)s " + \
             ('%(process)s%(threadName)s:' if withThreads else '') + \
@@ -110,6 +112,7 @@ if __name__ == "__main__":
         help='show full path to files instead of just module and function')
     parser.add_argument("--withThreads", action="store_true", help='print process and thread name')
     parser.add_argument("-f", "--follow", action="store_true", help='follow file forever', default=False)
+    parser.add_argument("-l", "--localtime", action="store_true", help='print logs in localtime (default utc)', default=False)
     args = parser.parse_args()
 
     if _runningInATerminal and not args.noLess:
@@ -121,7 +124,7 @@ if __name__ == "__main__":
     formatter = Formatter(
         noDebug=args.noDebug, relativeTime=args.relativeTime, noColors=args.noColors,
         microsecondPrecision=args.microsecondPrecision, showFullPaths=args.showFullPaths,
-        withThreads=args.withThreads)
+        withThreads=args.withThreads, localTime=args.localtime)
 
     def _exitOrderlyOnCtrlC(signal, frame):
         sys.exit(0)
