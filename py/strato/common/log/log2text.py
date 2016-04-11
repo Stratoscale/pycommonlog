@@ -14,6 +14,23 @@ CYAN = '\033[36m'
 NORMAL_COLOR = '\033[39m'
 TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 
+MULTY_LOG_COLORS = (
+    "\033[1;30m",
+    # "\033[1;41m",
+    "\033[1;32m",
+    "\033[1;33m",
+    "\033[1;34m",
+    "\033[1;35m",
+    "\033[1;36m",
+    "\033[2;30m",
+    # "\033[0;41m",
+    "\033[2;32m",
+    "\033[2;33m",
+    "\033[2;34m",
+    "\033[2;35m",
+    "\033[2;36m",
+)
+COLOR_OFF = "\033[0;0m"
 
 class Formatter:
     _COLORS = {logging.PROGRESS: CYAN, logging.ERROR: RED, logging.WARNING: YELLOW}
@@ -95,10 +112,54 @@ def printLog(logFile, formatter, follow):
             print "Failed to parse record '%s' " % line
 
 
+def _getNextParsableEntry(inputStream, logFile, colorCode):
+    """
+    list the file until the next parsable line
+    finish when all lines were listed
+    """
+    while True:
+        try:
+            line = inputStream.next()
+            obj = json.loads(line)
+            formatted = formatter.process(obj)
+            if formatted is not None:
+                formatted = "%s %s(%s)%s" % (formatted, colorCode, logFile, COLOR_OFF)
+            return obj, formatted
+        except StopIteration:
+            return None
+        except:
+            print "Failed to parse record '%s' " % line
+
+
+def _getColorCode(id):
+    return MULTY_LOG_COLORS[id % (len(MULTY_LOG_COLORS) - 1)]
+
+
+def printLogs(logFiles, formatter):
+    inputStreams = [(open(logFile), logFile) for logFile in logFiles]
+
+    # initialize current lines
+    currentLines= []
+    for streamId, (inputStream, logFile) in enumerate(inputStreams):
+        currentLines.append(_getNextParsableEntry(inputStream, logFile, _getColorCode(streamId)))
+
+    while True:
+        # finished all input streams
+        if not any(currentLines):
+            break
+
+        _, nextStreamId, formatted = min((line[0]['created'], streamId, line[1])
+                                         for streamId, line in enumerate(currentLines) if line is not None)
+        if formatted is not None:
+            print formatted
+
+        inputStream = inputStreams[nextStreamId]
+        currentLines[nextStreamId] = _getNextParsableEntry(inputStream[0], inputStream[1],_getColorCode(nextStreamId))
+
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("logFile", help='logfile to read or - for stdin')
+    parser.add_argument("logFiles", metavar='logFile', nargs='+', help='logfiles to read or - for stdin')
     parser.add_argument("--noDebug", action='store_true', help='filter out debug messages')
     parser.add_argument("--relativeTime", action='store_true', help='print relative time, not absolute')
     parser.add_argument("--noColors", action='store_true', help='force monochromatic output even on a TTY')
@@ -129,4 +190,8 @@ if __name__ == "__main__":
     def _exitOrderlyOnCtrlC(signal, frame):
         sys.exit(0)
     signal.signal(signal.SIGINT, _exitOrderlyOnCtrlC)
-    printLog(logFile=args.logFile, formatter=formatter, follow=args.follow)
+
+    if len(args.logFiles) == 1:
+        printLog(logFile=args.logFiles[0], formatter=formatter, follow=args.follow)
+    else:
+        printLogs(logFiles=args.logFiles, formatter=formatter)
