@@ -4,6 +4,8 @@ import os
 import sys
 import time
 import signal
+import re
+import datetime
 import logging
 import strato.common.log.morelevels
 
@@ -107,7 +109,10 @@ def printLog(logFile, formatter, follow):
             print "Failed to parse record '%s' " % line
 
 
-def _getNextParsableEntry(inputStream, logFile, colorCode):
+def _addLogName(line, colorCode, logFile):
+    return "%s %s(%s)%s" % (line, colorCode, logFile, COLOR_OFF)
+
+def _getNextParsableEntry(inputStream, logFile, colorCode, formatter):
     """
     list the file until the next parsable line
     finish when all lines were listed
@@ -117,13 +122,26 @@ def _getNextParsableEntry(inputStream, logFile, colorCode):
             line = inputStream.next()
             obj = json.loads(line)
             formatted = formatter.process(obj)
-            if formatted is not None:
-                formatted = "%s %s(%s)%s" % (formatted, colorCode, logFile, COLOR_OFF)
-            return obj, formatted
+            return obj, None if formatted is None else _addLogName(formatted, colorCode, logFile)
         except StopIteration:
             return None
         except:
-            print "Failed to parse record '%s' " % line
+            line = line.strip()
+            timestampMatch = re.match(r'(\d+\.\d+)(.*)', line)
+            if timestampMatch is not None:
+                timestamp = float(timestampMatch.group(1).split('.')[0])
+                formatted = "%s %s" % (formatter._absoluteClock(timestamp), timestampMatch.group(2))
+                return {'created': timestamp}, _addLogName(formatted, colorCode, logFile)
+            else:
+                dateMatch = re.match(r'(\d{4})/(\d{2})/(\d{2}) (\d{2}):(\d{2}):(\d{2})', line)
+                if dateMatch is not None:
+                    dt = datetime.datetime(int(dateMatch.group(1)), int(dateMatch.group(2)), int(dateMatch.group(3)),
+                                           int(dateMatch.group(4)), int(dateMatch.group(5)), int(dateMatch.group(6)))
+                    timestamp = time.mktime(dt.timetuple())
+                    return {'created': timestamp}, _addLogName(line, colorCode, logFile)
+                else:
+                    return {'created': 0}, line
+            # print "Failed to parse record '%s' " % line
 
 
 def _getColorCode(id):
@@ -136,7 +154,7 @@ def printLogs(logFiles, formatter):
     # initialize current lines
     currentLines= []
     for streamId, (inputStream, logFile) in enumerate(inputStreams):
-        currentLines.append(_getNextParsableEntry(inputStream, logFile, _getColorCode(streamId)))
+        currentLines.append(_getNextParsableEntry(inputStream, logFile, _getColorCode(streamId), formatter))
 
     while True:
         # finished all input streams
@@ -149,7 +167,8 @@ def printLogs(logFiles, formatter):
             print formatted
 
         inputStream = inputStreams[nextStreamId]
-        currentLines[nextStreamId] = _getNextParsableEntry(inputStream[0], inputStream[1],_getColorCode(nextStreamId))
+        currentLines[nextStreamId] = _getNextParsableEntry(inputStream[0], inputStream[1], _getColorCode(nextStreamId),
+                                                           formatter)
 
 if __name__ == "__main__":
     import argparse
