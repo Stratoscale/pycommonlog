@@ -197,6 +197,7 @@ if __name__ == "__main__":
     parser.add_argument("--withThreads", action="store_true", help='print process and thread name')
     parser.add_argument("-f", "--follow", action="store_true", help='follow file forever', default=False)
     parser.add_argument("-l", "--localtime", action="store_true", help='print logs in localtime (default utc)', default=False)
+    parser.add_argument("--freeFormat", action="store_true", help='support log files not in Stratoscale format')
     args = parser.parse_args()
 
     if _runningInATerminal and not args.noLess:
@@ -214,7 +215,7 @@ if __name__ == "__main__":
         sys.exit(0)
     signal.signal(signal.SIGINT, _exitOrderlyOnCtrlC)
 
-    if len(args.logFiles) == 1:
-        printLog(logFile=args.logFiles[0], formatter=formatter, follow=args.follow)
-    else:
+    if len(args.logFiles) > 1 or args.freeFormat:
         printLogs(logFiles=args.logFiles, formatter=formatter)
+    elif len(args.logFiles) == 1:
+        printLog(logFile=args.logFiles[0], formatter=formatter, follow=args.follow)
