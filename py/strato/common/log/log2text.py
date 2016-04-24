@@ -164,7 +164,11 @@ def printLogs(logFiles, formatter):
         _, nextStreamId, formatted = min((line[0]['created'], streamId, line[1])
                                          for streamId, line in enumerate(currentLines) if line is not None)
         if formatted is not None:
-            print formatted
+            # prevent printing the Broken Pipe error when 'less' is quitted
+            try:
+                print formatted
+            except IOError as e:
+                break
 
         inputStream = inputStreams[nextStreamId]
         currentLines[nextStreamId] = _getNextParsableEntry(inputStream[0], inputStream[1], _getColorCode(nextStreamId),
@@ -192,7 +196,7 @@ if __name__ == "__main__":
     if _runningInATerminal and not args.noLess:
         args = " ".join(["'%s'" % a for a in sys.argv[1:]])
         result = os.system(
-            "python -m strato.common.log.log2text %s --noLess | less --quit-if-one-screen" % args)
+            "python -m strato.common.log.log2text %s --noLess | less --quit-if-one-screen --RAW-CONTROL-CHARS" % args)
         sys.exit(result)
 
     formatter = Formatter(
