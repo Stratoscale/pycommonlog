@@ -13,7 +13,6 @@ import signal
 _name = None
 _registered_file_handles = dict()
 
-
 def logFilename(name):
     return '%s/%s%s' % (config.LOGS_DIRECTORY, name, config.LOGS_SUFFIX)
 
@@ -106,7 +105,7 @@ def _configureOutputToScreen(logger, loggerName):
         if _useColorsForScreenOutput():
             streamHandler.setFormatter(coloringformatter.ColoringFormatter(
                 '%(created).03f(%(process)d%(threadName)s):%(startColor)s%(levelname)s'
-                ':%(message)s%(endColor)s (%(pathname)s:%(lineno)d)'))
+                ': %(message)s%(endColor)s (%(pathname)s:%(lineno)d)'))
         else:
             streamHandler.setFormatter(logging.Formatter(
                 '%(created).03f(%(process)d%(threadName)s):%(levelname)s:%(message)s '
