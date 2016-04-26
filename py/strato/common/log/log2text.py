@@ -117,57 +117,117 @@ def printLog(logFile, formatter, follow):
 def _addLogName(line, colorCode, logFile):
     return "%s %s(%s)%s" % (line, colorCode, logFile, COLOR_OFF)
 
-def _getNextParsableEntry(inputStream, logFile, colorCode, formatter):
-    """
-    list the file until the next parsable line
-    finish when all lines were listed
-    """
-    while True:
-        try:
-            line = inputStream.next()
-            obj = json.loads(line)
-            formatted = formatter.process(obj)
-            return obj, None if formatted is None else _addLogName(formatted, colorCode, logFile)
-        except StopIteration:
-            return None
-        except:
-            line = line.strip()
-            timestampMatch = re.match(r'(\d+\.\d+)(.*)', line)
-            if timestampMatch is not None:
-                timestamp = float(timestampMatch.group(1).split('.')[0])
-                formatted = "%s %s" % (formatter._absoluteClock(timestamp), timestampMatch.group(2))
-                return {'created': timestamp}, _addLogName(formatted, colorCode, logFile)
-            else:
-                dateMatch = re.match(r'(\d{4})/(\d{2})/(\d{2}) (\d{2}):(\d{2}):(\d{2})', line)
-                if dateMatch is not None:
-                    dt = datetime.datetime(int(dateMatch.group(1)), int(dateMatch.group(2)), int(dateMatch.group(3)),
-                                           int(dateMatch.group(4)), int(dateMatch.group(5)), int(dateMatch.group(6)))
-                    timestamp = time.mktime(dt.timetuple())
-                    return {'created': timestamp}, _addLogName(line, colorCode, logFile)
-                else:
-                    return {'created': 0}, line
-            # print "Failed to parse record '%s' " % line
+def _formatStratoscaleStyle(line, props, colorCode, logFile):
+    try:
+        obj = json.loads(line)
+        obj['created'] = obj['created'] + props['skew']
+        formatted = formatter.process(obj)
+        return obj, None if formatted is None else _addLogName(formatted, colorCode, logFile)
+    except:
+        return None
 
+def _formatTimestampStyle(line, props, colorCode, logFile):
+    line = line.strip()
+    timestampMatch = re.match(r'(\d+\.\d+)(?P<suffix>.*)', line)
+    if timestampMatch is not None:
+        timestamp = float(timestampMatch.group(1).split('.')[0]) + props['skew']
+        formatted = "%s %s" % (formatter._absoluteClock(timestamp), timestampMatch.groupdict().get('suffix'))
+        return {'created': timestamp}, _addLogName(formatted, colorCode, logFile)
+    else:
+        return None
+
+def _formatDateStyle(line, props, colorCode, logFile):
+    line = line.strip()
+    dateMatch = re.match(r'(\d{4})/(\d{2})/(\d{2}) (\d{2}):(\d{2}):(\d{2})(?P<suffix>.*)', line)
+    if dateMatch is not None:
+        dt = datetime.datetime(int(dateMatch.group(1)), int(dateMatch.group(2)), int(dateMatch.group(3)),
+                               int(dateMatch.group(4)), int(dateMatch.group(5)), int(dateMatch.group(6)))
+        timestamp = time.mktime(dt.timetuple()) + props['skew']
+        formatted = "%s %s" % (formatter._absoluteClock(timestamp), dateMatch.groupdict().get('suffix'))
+        return {'created': timestamp}, _addLogName(formatted, colorCode, logFile)
+    else:
+        return None
+
+def _formatNextEntry(inputStream, logFile, colorCode, formatter, props):
+    try:
+        line = inputStream.next()
+    except StopIteration:
+        return None
+
+    stratoscaleStyle = _formatStratoscaleStyle(line, props, colorCode, logFile)
+    if stratoscaleStyle is not None:
+        return stratoscaleStyle
+
+    timestampStyle = _formatTimestampStyle(line, props, colorCode, logFile)
+    if timestampStyle is not None:
+        return timestampStyle
+
+    dateStyle = _formatDateStyle(line, props, colorCode, logFile)
+    if dateStyle is not None:
+        return dateStyle
+
+    # returning the skew here will cause an effect of printing all entries from this log, until some
+    # entry which timestamp can be derived will be encountered, because the value of skew is less that values
+    # of any other timestamps.
+    return {'created': props['skew']}, line.strip()
 
 def _getColorCode(id):
     return MULTY_LOG_COLORS[id % (len(MULTY_LOG_COLORS) - 1)]
 
+def _parseLogFileArg(str):
+    parts = str.split('?')
+    path = parts[0]
+    props = {}
+    if len(parts) > 1:
+        for prop in parts[1].split('&'):
+            keyvalue = prop.split('=')
+            if len(keyvalue) > 1:
+                props[keyvalue[0]] = keyvalue[1]
+            else:
+                props[keyvalue[0]] = True
+    return path, props
 
-def printLogs(logFiles, formatter):
-    inputStreams = [(open(logFile), logFile) for logFile in logFiles]
+def _parseSkew(skew):
+    """
+    example skew format '-2h11m5s', any part may be skipped
+    """
+    skewMatch = re.match(r'(?P<sign>[+-]?)((?P<hours>\d+)h)?((?P<minutes>\d+)m)?((?P<seconds>\d+)s)?', skew)
+    if skewMatch is not None:
+        hours = int(skewMatch.groupdict().get('hours') or 0)
+        minutes = int(skewMatch.groupdict().get('minutes') or 0)
+        seconds = int(skewMatch.groupdict().get('seconds') or 0)
+        sign = -1 if (skewMatch.groupdict().get('sign') or '+') == '-' else 1
+        skew = sign * (hours * 60 * 60 + minutes * 60 + seconds)
+    else:
+        skew = 0
+    return skew
+
+def _parseLogFileArgs(logFiles):
+    res = {}
+    for str in logFiles:
+        path, props = _parseLogFileArg(str)
+        skew = _parseSkew(props.get('skew')) if 'skew' in props else 0
+        res[path] = {'skew': skew}
+    return res
+
+
+def printLogs(logFilesRaw, formatter):
+    logFileProps = _parseLogFileArgs(logFilesRaw)
+    inputStreams = {path: open(path) for path in logFileProps.keys()}
+    logId = {path: i for i, path in enumerate(logFileProps.keys())}
 
     # initialize current lines
-    currentLines= []
-    for streamId, (inputStream, logFile) in enumerate(inputStreams):
-        currentLines.append(_getNextParsableEntry(inputStream, logFile, _getColorCode(streamId), formatter))
+    currentLines= {}
+    for path, inputStream in inputStreams.iteritems():
+        currentLines[path] = _formatNextEntry(inputStream, path, _getColorCode(logId[path]), formatter, logFileProps[path])
 
     while True:
         # finished all input streams
-        if not any(currentLines):
+        if not any(currentLines.values()):
             break
 
-        _, nextStreamId, formatted = min((line[0]['created'], streamId, line[1])
-                                         for streamId, line in enumerate(currentLines) if line is not None)
+        _, nextPath, formatted = min((line[0]['created'], path, line[1])
+                                         for path, line in currentLines.iteritems() if line is not None)
         if formatted is not None:
             # prevent printing the Broken Pipe error when 'less' is quitted
             try:
@@ -175,14 +235,16 @@ def printLogs(logFiles, formatter):
             except IOError as e:
                 break
 
-        inputStream = inputStreams[nextStreamId]
-        currentLines[nextStreamId] = _getNextParsableEntry(inputStream[0], inputStream[1], _getColorCode(nextStreamId),
-                                                           formatter)
+        currentLines[nextPath] = _formatNextEntry(inputStreams[nextPath], nextPath, _getColorCode(logId[nextPath]),
+                                                           formatter, logFileProps[nextPath])
 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("logFiles", metavar='logFile', nargs='+', help='logfiles to read or - for stdin')
+    parser.add_argument("logFiles", metavar='logFile', nargs='+',
+                        help='logfiles to read or - for stdin. '
+                             'In a multilog or freeFormat mode, a logFile can be provided with skew attribute that will '
+                             'adjust a timestamps on it\'s entries in a following way "consul.log?skew=-1h"')
     parser.add_argument("--noDebug", action='store_true', help='filter out debug messages')
     parser.add_argument("--relativeTime", action='store_true', help='print relative time, not absolute')
     parser.add_argument("--noColors", action='store_true', help='force monochromatic output even on a TTY')
@@ -216,6 +278,6 @@ if __name__ == "__main__":
     signal.signal(signal.SIGINT, _exitOrderlyOnCtrlC)
 
     if len(args.logFiles) > 1 or args.freeFormat:
-        printLogs(logFiles=args.logFiles, formatter=formatter)
+        printLogs(logFilesRaw=args.logFiles, formatter=formatter)
     elif len(args.logFiles) == 1:
         printLog(logFile=args.logFiles[0], formatter=formatter, follow=args.follow)
