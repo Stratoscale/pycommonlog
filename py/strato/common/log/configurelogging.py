@@ -11,6 +11,7 @@ import subprocess
 import signal
 
 _name = None
+_registered_file_handles = dict()
 
 
 def logFilename(name):
@@ -126,6 +127,8 @@ def _configureOutputToFile(logger, logName):
     handler.set_name(handlerName)
     handler.setLevel(logging.DEBUG)
     logger.addHandler(handler)
+    global _registered_file_handles
+    _registered_file_handles[logName] = (logger, handler)
     logger.findCaller = _findCaller
 
 def _configureLogLevels(name):
@@ -145,7 +148,17 @@ def _configureLogLevels(name):
         dictConfig.update(overrides.get(name, {}))
     logging.config.dictConfig(dictConfig)
 
+def reopenLogginFiles():
+    global _registered_file_handles
+    save_handles = _registered_file_handles
+    _registered_file_handles = dict()
+    for logName, (logger, handler) in save_handles.iteritems():
+        handler.close()
+        logger.removeHandler(handler)
+        _configureOutputToFile(logger, logName)
+
 def reloadLoggingConfiguration():
+    reopenLogginFiles()
     global _name
     if _name is not None:
         _configureLogLevels(_name)
