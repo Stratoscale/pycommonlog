@@ -59,7 +59,7 @@ class Formatter:
     def process(self, obj):
         if obj['levelno'] < self._minimumLevel:
             return None
-        if 'args' in obj:
+        if 'args' in obj and obj['args']:
             if isinstance(obj['args'], (dict, tuple)):
                 message = obj['msg'] % obj['args']
             elif isinstance(obj['args'], list):
@@ -67,7 +67,7 @@ class Formatter:
             else:
                 message = obj['msg']
         else:
-            message = obj['msg']
+            message = obj['msg'].replace('%', '%%')
         clock = self._clock(obj['created'])
         colorPrefix = self._COLORS.get(obj['levelno'], '')
         formatted = self._logFormat % dict(
