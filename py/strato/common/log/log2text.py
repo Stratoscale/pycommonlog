@@ -183,30 +183,24 @@ def _getNextParsableEntry(inputStream, logFile, colorCode, formatter):
         try:
             line = inputStream.next()
             formatted, timestamp = formatter.process(line, logFile, logTypeConf)
-            return timestamp, None if formatted is None else _addLogName(formatted, colorCode, logFile)
+            return None if formatted is None else _addLogName(formatted, colorCode, logFile), timestamp
         except StopIteration:
             return None
         except:
-            return HIGHEST_PRIORITY, line
+            return line, HIGHEST_PRIORITY
 
 def _getColorCode(id):
     return MULTY_LOG_COLORS[id % (len(MULTY_LOG_COLORS) - 1)]
 
 
 def printLogs(logFiles, formatter):
-    inputStreams = [(open(logFile), logFile) for logFile in logFiles]
+    inputStreams = [(open(logFile, 'r'), logFile) for logFile in logFiles]
 
-    # initialize current lines
-    currentLines= []
-    for streamId, (inputStream, logFile) in enumerate(inputStreams):
-        currentLines.append(_getNextParsableEntry(inputStream, logFile, _getColorCode(streamId), formatter))
+    currentLines= [_getNextParsableEntry(inputStream, logFile, _getColorCode(streamId), formatter)
+                   for streamId, (inputStream, logFile) in enumerate(inputStreams)]
 
-    while True:
-        # finished all input streams
-        if not any(currentLines):
-            break
-
-        _, nextStreamId, formatted = min((line[0], streamId, line[1])
+    while any(currentLines):
+        _, nextStreamId, formatted = min((line[1], streamId, line[0])
                                          for streamId, line in enumerate(currentLines) if line is not None)
         if formatted is not None:
             # prevent printing the Broken Pipe error when 'less' is quitted
