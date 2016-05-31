@@ -76,7 +76,8 @@ class Formatter:
             elif 'message' in parsed:
                 return self._processExceptionLog(line)
         except:
-            return self._processGenericLog(line, logConf)
+            pass
+        return self._processGenericLog(line, logConf)
 
     def _getLogTypeConf(self, logPath):
         for logType in self.configFile['logTypes']:
