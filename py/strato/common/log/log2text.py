@@ -68,7 +68,7 @@ class Formatter:
             (NORMAL_COLOR if useColors else '') + \
             ("(%(pathname)s:%(lineno)s)" if showFullPaths else "(%(module)s::%(funcName)s:%(lineno)s)")
 
-    def process(self, line, logPath, logConf):
+    def process(self, line, logPath, logTypeConf):
         try:
             parsed = json.loads(line)
             if 'msg' in parsed:
@@ -77,20 +77,23 @@ class Formatter:
                 return self._processExceptionLog(line)
         except:
             pass
-        return self._processGenericLog(line, logConf)
+        return self._processGenericLog(line, logTypeConf)
 
     def _getLogTypeConf(self, logPath):
-        for logType in self.configFile['logTypes']:
-            for pattern in logType['paths']:
-                if re.compile(pattern).match(os.path.basename(logPath)):
-                    return logType
-        return None
-
-    def _processGenericLog(self, line, logConf):
         try:
-            msg, timestamp = lineparse.seperateTimestamp(line, logConf['logFormat']['timestamp'])
-            epochTime = lineparse.translateToEpoch(timestamp, logConf['timeStampFormat'])
-            if logConf['timezoneOffset'] == 'localtime':
+            for logType in self.configFile['logTypes']:
+                for pattern in logType['paths']:
+                    if re.compile(pattern).match(os.path.basename(logPath)):
+                        return logType
+            return None
+        except:
+            return None
+
+    def _processGenericLog(self, line, logTypeConf):
+        try:
+            msg, timestamp = lineparse.seperateTimestamp(line, logTypeConf['logFormat']['timestamp'])
+            epochTime = lineparse.translateToEpoch(timestamp, logTypeConf['timeStampFormat'])
+            if logTypeConf['timezoneOffset'] == 'localtime':
                 epochTime += self._localTimezoneOffset
             return line.strip().replace(timestamp, self._clock(epochTime)), epochTime
         except:
