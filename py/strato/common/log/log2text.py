@@ -68,7 +68,7 @@ class Formatter:
             (NORMAL_COLOR if useColors else '') + \
             ("(%(pathname)s:%(lineno)s)" if showFullPaths else "(%(module)s::%(funcName)s:%(lineno)s)")
 
-    def process(self, line, logPath, logTypeConf):
+    def process(self, line, logTypeConf):
         try:
             parsed = json.loads(line)
             if 'msg' in parsed:
@@ -92,7 +92,10 @@ class Formatter:
     def _processGenericLog(self, line, logTypeConf):
         try:
             msg, timestamp = lineparse.seperateTimestamp(line, logTypeConf['logFormat']['timestamp'])
-            epochTime = lineparse.translateToEpoch(timestamp, logTypeConf['timeStampFormat'])
+            if logTypeConf['timeStampFormat']:
+                epochTime = lineparse.translateToEpoch(timestamp, logTypeConf['timeStampFormat'])
+            else:
+                epochTime = float(timestamp)
             if logTypeConf['timezoneOffset'] == 'localtime':
                 epochTime += self._localTimezoneOffset
             return line.strip().replace(timestamp, self._clock(epochTime)), epochTime
@@ -129,7 +132,7 @@ class Formatter:
         if logPath not in self._exceptionLogsFileColorMapping:
             self._exceptionLogsFileColorMapping[logPath] = _getColorCode(len(self._exceptionLogsFileColorMapping))
         logTypeConf = self._getLogTypeConf(logPath)
-        line, timestamp = self.process(line, logPath, logTypeConf)
+        line, timestamp = self.process(line, logTypeConf)
         return _addLogName(line, self._exceptionLogsFileColorMapping[logPath], logPath), timestamp
 
     def _relativeClock(self, created):
@@ -162,7 +165,7 @@ def printLog(logFile, formatter, follow):
         inputStream = follow_generator(inputStream)
     for line in inputStream:
         try:
-            formatted, timestamp = formatter.process(line, logFile, logTypeConf)
+            formatted, timestamp = formatter.process(line, logTypeConf)
             if formatted is None:
                 continue
             print formatted
@@ -182,7 +185,7 @@ def _getNextParsableEntry(inputStream, logFile, colorCode, formatter):
     while True:
         try:
             line = inputStream.next()
-            formatted, timestamp = formatter.process(line, logFile, logTypeConf)
+            formatted, timestamp = formatter.process(line, logTypeConf)
             return None if formatted is None else _addLogName(formatted, colorCode, logFile), timestamp
         except StopIteration:
             return None
