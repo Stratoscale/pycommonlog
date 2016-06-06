@@ -169,6 +169,9 @@ def printLog(logFile, formatter, follow):
             if formatted is None:
                 continue
             print formatted
+        except IOError:
+            inputStream.close()
+            break
         except:
             print "Failed to parse record '%s' " % line
 
