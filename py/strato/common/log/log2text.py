@@ -106,7 +106,7 @@ class Formatter:
     def _processStratolog(self, line):
         parsedLine = json.loads(line)
         if parsedLine['levelno'] < self._minimumLevel:
-            return None
+            return None, 0
 
         if 'args' in parsedLine and parsedLine['args']:
             if isinstance(parsedLine['args'], (dict, tuple)):
@@ -250,7 +250,6 @@ if __name__ == "__main__":
     def _exitOrderlyOnCtrlC(signal, frame):
         sys.exit(0)
     signal.signal(signal.SIGINT, _exitOrderlyOnCtrlC)
-
     if len(args.logFiles) == 1:
         printLog(logFile=args.logFiles[0], formatter=formatter, follow=args.follow)
     else:
