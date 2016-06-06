@@ -39,6 +39,7 @@ MULTY_LOG_COLORS = (
 COLOR_OFF = "\033[0;0m"
 LOG_CONFIG_FILE_PATH = "/etc/stratoscale/strato-log.conf"
 HIGHEST_PRIORITY = 0
+EPOCH_HOUR = 3600
 
 class Formatter:
     _COLORS = {logging.PROGRESS: CYAN, logging.ERROR: RED, logging.WARNING: YELLOW}
@@ -54,7 +55,10 @@ class Formatter:
         self._clock = self._relativeClock if relativeTime else self._absoluteClock
         self._relativeClockFormat = "%.6f" if microsecondPrecision else "%.3f"
         self._minimumLevel = logging.INFO if noDebug else logging.DEBUG
-        self._localTimezoneOffset = lineparse.getTimezoneOffset()
+        if self.configFile['defaultTimezone'] != None:
+            self._localTimezoneOffset = self.configFile['defaultTimezone'] * EPOCH_HOUR
+        else:
+            self._localTimezoneOffset = lineparse.getTimezoneOffset()
         self._exceptionLogsFileColorMapping = {}
         useColors = False if noColors else _runningInATerminal()
         if localTime:
@@ -219,10 +223,18 @@ def printLogs(logFiles, formatter):
         currentLines[nextStreamId] = _getNextParsableEntry(inputStream[0], inputStream[1], _getColorCode(nextStreamId),
                                                            formatter)
 
+def updateConfFile(field, value):
+    with open(LOG_CONFIG_FILE_PATH, 'r') as f:
+        conf = yaml.load(f.read())
+        conf[field] = value
+    with open('/tmp/stratolog-conf.tmp', 'w') as f:
+        f.write(yaml.dump(conf))
+    os.system('sudo mv /tmp/stratolog-conf.tmp %s' % LOG_CONFIG_FILE_PATH)
+
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("logFiles", metavar='logFile', nargs='+', help='logfiles to read or - for stdin')
+    parser.add_argument("logFiles", metavar='logFile', nargs='*', help='logfiles to read or - for stdin')
     parser.add_argument("--noDebug", action='store_true', help='filter out debug messages')
     parser.add_argument("--relativeTime", action='store_true', help='print relative time, not absolute')
     parser.add_argument("--noColors", action='store_true', help='force monochromatic output even on a TTY')
@@ -237,7 +249,19 @@ if __name__ == "__main__":
     parser.add_argument("--withThreads", action="store_true", help='print process and thread name')
     parser.add_argument("-f", "--follow", action="store_true", help='follow file forever', default=False)
     parser.add_argument("-l", "--localtime", action="store_true", help='print logs in localtime (default utc)', default=False)
+    parser.add_argument("--setLocaltimeOffset", type=int, help='set custom localtime offset in hours')
+    parser.add_argument("--restoreLocaltimeOffset", action="store_true", help='restore localtime offset to machine\'s offset')
     args = parser.parse_args()
+
+    actionHappened = False
+
+    if args.setLocaltimeOffset != None:
+        updateConfFile('defaultTimezone', args.setLocaltimeOffset)
+        actionHappened = True
+
+    if args.restoreLocaltimeOffset == True:
+        updateConfFile('defaultTimezone', None)
+        actionHappened = True
 
     if _runningInATerminal and not args.noLess:
         args = " ".join(["'%s'" % a for a in sys.argv[1:]])
@@ -257,3 +281,6 @@ if __name__ == "__main__":
         printLog(logFile=args.logFiles[0], formatter=formatter, follow=args.follow)
     else:
         printLogs(logFiles=args.logFiles, formatter=formatter)
+
+    if not args.logFiles and not actionHappened:
+        print 'No files were provided'
