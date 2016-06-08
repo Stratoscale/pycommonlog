@@ -49,16 +49,18 @@ class Formatter:
     def __init__(self, relativeTime, withThreads, showFullPaths, noDebug, microsecondPrecision, noColors, localTime=False):
         try:
             self.configFile = yaml.load(open(LOG_CONFIG_FILE_PATH, 'r').read())
+            if self.configFile['defaultTimezone'] != None:
+                self._localTimezoneOffset = self.configFile['defaultTimezone'] * EPOCH_HOUR
+            else:
+                self._localTimezoneOffset = lineparse.getTimezoneOffset()
         except:
+            self._localTimezoneOffset = lineparse.getTimezoneOffset()
             print "Failed to load config file. Please check the configuration"
         self._firstClock = None
         self._clock = self._relativeClock if relativeTime else self._absoluteClock
         self._relativeClockFormat = "%.6f" if microsecondPrecision else "%.3f"
         self._minimumLevel = logging.INFO if noDebug else logging.DEBUG
-        if self.configFile['defaultTimezone'] != None:
-            self._localTimezoneOffset = self.configFile['defaultTimezone'] * EPOCH_HOUR
-        else:
-            self._localTimezoneOffset = lineparse.getTimezoneOffset()
+
         self._exceptionLogsFileColorMapping = {}
         useColors = False if noColors else _runningInATerminal()
         if localTime:
