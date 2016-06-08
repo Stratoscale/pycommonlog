@@ -283,12 +283,12 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("logFiles", metavar='logFile', nargs='*', help='logfiles to read or - for stdin')
-    parser.add_argument("--noDebug", action='store_true', help='filter out debug messages')
-    parser.add_argument("--relativeTime", action='store_true', help='print relative time, not absolute')
-    parser.add_argument("--noColors", action='store_true', help='force monochromatic output even on a TTY')
-    parser.add_argument(
+    parser.add_argument('-d', "--noDebug", action='store_true', help='filter out debug messages')
+    parser.add_argument('-r', "--relativeTime", action='store_true', help='print relative time, not absolute')
+    parser.add_argument('-C', "--noColors", action='store_true', help='force monochromatic output even on a TTY')
+    parser.add_argument('-L',
         "--noLess", action="store_true", help='Do not pipe into less even when running in a TTY')
-    parser.add_argument(
+    parser.add_argument('-m',
         "--microsecondPrecision", action="store_true",
         help='print times in microsecond precision (instead of millisecond percision)')
     parser.add_argument(
