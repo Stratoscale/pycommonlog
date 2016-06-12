@@ -74,7 +74,7 @@ class Formatter:
             (NORMAL_COLOR if useColors else '') + \
             ("(%(pathname)s:%(lineno)s)" if showFullPaths else "(%(module)s::%(funcName)s:%(lineno)s)")
 
-    def process(self, line, logTypeConf):
+    def process(self, line, logTypeConf=None):
         try:
             parsed = json.loads(line)
             if 'msg' in parsed:
