@@ -8,6 +8,7 @@ import re
 import datetime
 import logging
 import yaml
+import glob
 import strato.common.log.morelevels
 import re
 from strato.common.log import lineparse
@@ -183,7 +184,7 @@ def printLog(logFile, formatter, follow):
 
 
 def _addLogName(line, colorCode, logFile):
-    return "%s %s(%s)%s" % (line, colorCode, logFile, COLOR_OFF)
+    return "%s %s(%s)%s" % (line, colorCode, os.path.basename(logFile), COLOR_OFF)
 
 def _getNextParsableEntry(inputStream, logFile, colorCode, formatter):
     """
@@ -225,6 +226,7 @@ def printLogs(logFiles, formatter):
         currentLines[nextStreamId] = _getNextParsableEntry(inputStream[0], inputStream[1], _getColorCode(nextStreamId),
                                                            formatter)
 
+
 def updateConfFile(field, value):
     with open(LOG_CONFIG_FILE_PATH, 'r') as f:
         conf = yaml.load(f.read())
@@ -232,6 +234,50 @@ def updateConfFile(field, value):
     with open('/tmp/stratolog-conf.tmp', 'w') as f:
         f.write(yaml.dump(conf))
     os.system('sudo mv /tmp/stratolog-conf.tmp %s' % LOG_CONFIG_FILE_PATH)
+
+
+class LogPathFinder:
+    def __init__(self, confFile):
+        try:
+            self.confFile = yaml.load(open(confFile, 'r').read())
+        except:
+            pass
+        self.defaultPaths = []
+
+    def findLogFiles(self, providedPaths):
+        logsToRead = []
+        [logsToRead.append(filePath) if os.path.isfile(filePath) else logsToRead.extend(self._tryToMatchShortcut(filePath)) for filePath in providedPaths]
+        return logsToRead
+
+    def _tryToMatchShortcut(self, filePath):
+        try:
+            if filePath in self.confFile['defaultBundles']:
+                return self.matchBundle(filePath)
+            else:
+                return self.tryToMatchDefaultPath(filePath)
+        except:
+            raise Exception("No matching files were found for %s" % filePath)
+
+    def matchBundle(self, filePath):
+        filesInBundle = glob.glob(self.confFile['defaultBundles'][filePath])
+        if filesInBundle:
+            return filesInBundle
+        else:
+            raise Exception("No matching files were found for %s" % filePath)
+
+    def tryToMatchDefaultPath(self, filePath):
+        if not self.defaultPaths:
+            self._getDefaultPaths()
+        matchingFiles = [defaultFilePath for defaultFilePath in self.defaultPaths
+                         if filePath.lower() in defaultFilePath.lower() and os.path.isfile(defaultFilePath)]
+        if not matchingFiles:
+            raise Exception("No matching files were found for %s" % filePath)
+        else:
+            return matchingFiles
+
+    def _getDefaultPaths(self):
+        for filePath in self.confFile['defaultPaths']:
+            self.defaultPaths.extend(glob.glob(filePath))
 
 if __name__ == "__main__":
     import argparse
@@ -279,10 +325,12 @@ if __name__ == "__main__":
     def _exitOrderlyOnCtrlC(signal, frame):
         sys.exit(0)
     signal.signal(signal.SIGINT, _exitOrderlyOnCtrlC)
-    if len(args.logFiles) == 1:
-        printLog(logFile=args.logFiles[0], formatter=formatter, follow=args.follow)
+    logFinder = LogPathFinder(LOG_CONFIG_FILE_PATH)
+    logFiles = logFinder.findLogFiles(args.logFiles)
+    if len(logFiles) == 1:
+        printLog(logFile=logFiles[0], formatter=formatter, follow=args.follow)
     else:
-        printLogs(logFiles=args.logFiles, formatter=formatter)
+        printLogs(logFiles=logFiles, formatter=formatter)
 
     if not args.logFiles and not actionHappened:
         print 'No files were provided'
