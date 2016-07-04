@@ -244,10 +244,17 @@ class LogPathFinder:
             pass
         self.defaultPaths = []
 
-    def findLogFiles(self, providedPaths):
+    def findLogFiles(self, providedPaths, extensionsToIgnore):
         logsToRead = []
         [logsToRead.append(filePath) if os.path.isfile(filePath) else logsToRead.extend(self._tryToMatchShortcut(filePath)) for filePath in providedPaths]
+        self.filterIgnoredExtensions(logsToRead, extensionsToIgnore)
         return logsToRead
+
+    def filterIgnoredExtensions(self, listPaths, ignoredExtensions):
+        for ignoredExtension in ignoredExtensions:
+            for path in listPaths:
+                if path.endswith(ignoredExtension):
+                    listPaths.remove(path)
 
     def _tryToMatchShortcut(self, filePath):
         try:
@@ -299,6 +306,7 @@ if __name__ == "__main__":
     parser.add_argument("-l", "--localtime", action="store_true", help='print logs in localtime (default utc)', default=False)
     parser.add_argument("--setLocaltimeOffset", type=int, help='set custom localtime offset in hours')
     parser.add_argument("--restoreLocaltimeOffset", action="store_true", help='restore localtime offset to machine\'s offset')
+    parser.add_argument("-i", "--ignoreExtensions", nargs="+",  help="list extensions that you don\'t want to read", default=[".gz"])
     args = parser.parse_args()
 
     actionHappened = False
@@ -326,7 +334,7 @@ if __name__ == "__main__":
         sys.exit(0)
     signal.signal(signal.SIGINT, _exitOrderlyOnCtrlC)
     logFinder = LogPathFinder(LOG_CONFIG_FILE_PATH)
-    logFiles = logFinder.findLogFiles(args.logFiles)
+    logFiles = logFinder.findLogFiles(args.logFiles, args.ignoreExtensions)
     if len(logFiles) == 1:
         printLog(logFile=logFiles[0], formatter=formatter, follow=args.follow)
     else:
