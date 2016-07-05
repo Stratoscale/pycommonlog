@@ -4,13 +4,12 @@ import os
 import sys
 import time
 import signal
-import re
-import datetime
 import logging
 import yaml
 import glob
 import strato.common.log.morelevels
 import re
+import gzip
 from strato.common.log import lineparse
 
 
@@ -166,7 +165,7 @@ def follow_generator(istream):
 
 
 def printLog(logFile, formatter, follow):
-    inputStream = sys.stdin if logFile == "-" else open(logFile)
+    inputStream = sys.stdin if logFile == "-" else universalOpen(logFile, 'r')
     logTypeConf = formatter._getLogTypeConf(logFile)
     if follow:
         inputStream = follow_generator(inputStream)
@@ -207,7 +206,7 @@ def _getColorCode(id):
 
 
 def printLogs(logFiles, formatter):
-    inputStreams = [(open(logFile, 'r'), logFile) for logFile in logFiles]
+    inputStreams = [(universalOpen(logFile, 'r'), logFile) for logFile in logFiles]
 
     currentLines= [_getNextParsableEntry(inputStream, logFile, _getColorCode(streamId), formatter)
                    for streamId, (inputStream, logFile) in enumerate(inputStreams)]
@@ -236,6 +235,13 @@ def updateConfFile(field, value):
     os.system('sudo mv /tmp/stratolog-conf.tmp %s' % LOG_CONFIG_FILE_PATH)
 
 
+def universalOpen(filePath, mode='r'):
+    if filePath.endswith('.gz'):
+        return gzip.GzipFile(filePath, mode)
+    else:
+        return open(filePath, mode)
+
+
 class LogPathFinder:
     def __init__(self, confFile):
         try:
@@ -246,22 +252,24 @@ class LogPathFinder:
 
     def findLogFiles(self, providedPaths, extensionsToIgnore):
         logsToRead = []
-        [logsToRead.append(filePath) if os.path.isfile(filePath) else logsToRead.extend(self._tryToMatchShortcut(filePath)) for filePath in providedPaths]
-        self.filterIgnoredExtensions(logsToRead, extensionsToIgnore)
+        [logsToRead.append(filePath) if os.path.isfile(filePath) else
+         logsToRead.extend(self._tryToMatchShortcut(filePath, extensionsToIgnore)) for filePath in providedPaths]
         return logsToRead
 
     def filterIgnoredExtensions(self, listPaths, ignoredExtensions):
-        for ignoredExtension in ignoredExtensions:
-            for path in listPaths:
+        for path in list(listPaths):
+            for ignoredExtension in ignoredExtensions:
                 if path.endswith(ignoredExtension):
                     listPaths.remove(path)
 
-    def _tryToMatchShortcut(self, filePath):
+    def _tryToMatchShortcut(self, filePath, extensionsToIgnore):
         try:
             if filePath in self.confFile['defaultBundles']:
                 return self.matchBundle(filePath)
             else:
-                return self.tryToMatchDefaultPath(filePath)
+                matches = self.tryToMatchDefaultPath(filePath)
+                self.filterIgnoredExtensions(matches, extensionsToIgnore)
+                return matches
         except:
             raise Exception("No matching files were found for %s" % filePath)
 
@@ -307,6 +315,7 @@ if __name__ == "__main__":
     parser.add_argument("--setLocaltimeOffset", type=int, help='set custom localtime offset in hours')
     parser.add_argument("--restoreLocaltimeOffset", action="store_true", help='restore localtime offset to machine\'s offset')
     parser.add_argument("-i", "--ignoreExtensions", nargs="+",  help="list extensions that you don\'t want to read", default=[".gz"])
+    parser.add_argument("-a", "--showAll", action="store_true", help='show all logs', default=False)
     args = parser.parse_args()
 
     actionHappened = False
@@ -334,7 +343,11 @@ if __name__ == "__main__":
         sys.exit(0)
     signal.signal(signal.SIGINT, _exitOrderlyOnCtrlC)
     logFinder = LogPathFinder(LOG_CONFIG_FILE_PATH)
-    logFiles = logFinder.findLogFiles(args.logFiles, args.ignoreExtensions)
+    if args.showAll:
+        ignoreExtensions = []
+    else:
+        ignoreExtensions = args.ignoreExtensions
+    logFiles = logFinder.findLogFiles(args.logFiles, ignoreExtensions)
     if len(logFiles) == 1:
         printLog(logFile=logFiles[0], formatter=formatter, follow=args.follow)
     else:
