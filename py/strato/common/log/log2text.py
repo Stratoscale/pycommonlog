@@ -46,7 +46,7 @@ class Formatter:
 
     converter = time.gmtime
 
-    def __init__(self, relativeTime, withThreads, showFullPaths, noDebug, microsecondPrecision, noColors, utctime=False):
+    def __init__(self, relativeTime, withThreads, showFullPaths, noDebug, microsecondPrecision, noColors, utc=False):
         try:
             self.configFile = yaml.load(open(LOG_CONFIG_FILE_PATH, 'r').read())
             if self.configFile['defaultTimezone'] != None:
@@ -63,7 +63,7 @@ class Formatter:
 
         self._exceptionLogsFileColorMapping = {}
         useColors = False if noColors else _runningInATerminal()
-        if not utctime:
+        if not utc:
             self.converter = time.localtime
         self._logFormat = \
             "%(log2text_clock)s " + \
@@ -227,11 +227,17 @@ def printLogs(logFiles, formatter):
 
 
 def updateConfFile(field, value):
-    with open(LOG_CONFIG_FILE_PATH, 'r') as f:
-        conf = yaml.load(f.read())
+    try:
+        with open(LOG_CONFIG_FILE_PATH, 'r') as f:
+            conf = yaml.load(f.read())
+    except:
+        print "No configuration file was found. creating new"
+        conf = {}
+    finally:
         conf[field] = value
     with open('/tmp/stratolog-conf.tmp', 'w') as f:
         f.write(yaml.dump(conf))
+        f.close()
     os.system('sudo mv /tmp/stratolog-conf.tmp %s' % LOG_CONFIG_FILE_PATH)
 
 
@@ -241,6 +247,38 @@ def universalOpen(filePath, mode='r'):
     else:
         return open(filePath, mode)
 
+def ping(host):
+    return os.system("ping -c 1 %s > /dev/null 2>&1" % host) == 0
+
+def runRemotely(host, ignoreArgs):
+    try:
+        configFile = yaml.load(open(LOG_CONFIG_FILE_PATH, 'r').read())
+    except:
+        configFile = {}
+        print "Configuration file was not found"
+
+    args = [arg for arg in sys.argv[1:] if arg not in ignoreArgs]
+    command = "strato-log %s" % ' '.join(args)
+
+    sshCommand = 'sshpass -p %(password)s ssh -o ServerAliveInterval=5 -o ServerAliveCountMax=1 -o ' \
+                 'StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null %(hostname)s %(command)s | less -r'
+    hostname = "%(user)s@%(hostname)s" % dict(user=configFile.get("defaultRemoteUser", 'root'),
+                                              hostname=findHostname(host))
+
+    os.system(sshCommand % dict(command=command,
+                                hostname=hostname,
+                                password=configFile.get("defaultRemotePassword", 'password')))
+
+def findHostname(host):
+    possibleSuffixes = ['.service.strato', '.node.strato']
+    if ping(host):
+        return host
+    else:
+        for suffix in possibleSuffixes:
+            if ping(host + suffix):
+                return host + suffix
+    print "No reachable host was found for %s" % host
+    exit(1)
 
 class LogPathFinder:
     def __init__(self, confFile):
@@ -311,14 +349,39 @@ if __name__ == "__main__":
         help='show full path to files instead of just module and function')
     parser.add_argument("--withThreads", action="store_true", help='print process and thread name')
     parser.add_argument("-f", "--follow", action="store_true", help='follow file forever', default=False)
-    parser.add_argument("-u", "--utctime", action="store_true", help='print logs in utc time (default localtime)', default=False)
+    parser.add_argument("-U", "--utc", action="store_true", help='print logs in utc time (default localtime)', default=False)
     parser.add_argument("--setLocaltimeOffset", type=int, help='set custom localtime offset in hours')
-    parser.add_argument("--restoreLocaltimeOffset", action="store_true", help='restore localtime offset to machine\'s offset')
     parser.add_argument("-i", "--ignoreExtensions", nargs="+",  help="list extensions that you don\'t want to read", default=[".gz"])
     parser.add_argument("-a", "--showAll", action="store_true", help='show all logs', default=False)
-    args = parser.parse_args()
+    parser.add_argument("-n", "--node", type=str, help='run strato-log on remote node (possible input is host name or service with dns resolve', default=None)
+    parser.add_argument("-p", "--password", type=str, help='set default remote password to connect with', default=None)
+    parser.add_argument("-u", "--user", type=str, help='set default remote user to connect to', default=None)
+    parser.add_argument("--restoreLocaltimeOffset", action="store_true", help='restore localtime offset to machine\'s offset')
+    parser.add_argument("-t", "--tail", type=int, help='print n last lines only')
+
+    args, unknown = parser.parse_known_args()
+    ignoreArgs = []
 
     actionHappened = False
+
+    if args.user != None:
+        updateConfFile('defaultRemoteUser', args.user)
+        ignoreArgs.extend(['-u', '--user', args.user])
+        actionHappened = True
+
+    if args.password != None:
+        updateConfFile('defaultRemotePassword', args.password)
+        ignoreArgs.extend(['-p', '--password', args.password])
+        actionHappened = True
+
+    if args.node != None:
+        ignoreArgs.extend(['-n', '--node', args.node])
+        runRemotely(args.node, ignoreArgs)
+        exit(0)
+    elif unknown:
+        for arg in unknown:
+            print "Not a valid argument \"%s\"" % arg
+        exit(1)
 
     if args.setLocaltimeOffset != None:
         updateConfFile('defaultTimezone', args.setLocaltimeOffset)
@@ -337,7 +400,7 @@ if __name__ == "__main__":
     formatter = Formatter(
         noDebug=args.noDebug, relativeTime=args.relativeTime, noColors=args.noColors,
         microsecondPrecision=args.microsecondPrecision, showFullPaths=args.showFullPaths,
-        withThreads=args.withThreads, utctime=args.utctime)
+        withThreads=args.withThreads, utc=args.utc)
 
     def _exitOrderlyOnCtrlC(signal, frame):
         sys.exit(0)
