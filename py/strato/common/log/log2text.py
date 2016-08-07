@@ -46,7 +46,7 @@ class Formatter:
 
     converter = time.gmtime
 
-    def __init__(self, relativeTime, withThreads, showFullPaths, noDebug, microsecondPrecision, noColors, localTime=False):
+    def __init__(self, relativeTime, withThreads, showFullPaths, noDebug, microsecondPrecision, noColors, utctime=False):
         try:
             self.configFile = yaml.load(open(LOG_CONFIG_FILE_PATH, 'r').read())
             if self.configFile['defaultTimezone'] != None:
@@ -63,7 +63,7 @@ class Formatter:
 
         self._exceptionLogsFileColorMapping = {}
         useColors = False if noColors else _runningInATerminal()
-        if localTime:
+        if not utctime:
             self.converter = time.localtime
         self._logFormat = \
             "%(log2text_clock)s " + \
@@ -311,7 +311,7 @@ if __name__ == "__main__":
         help='show full path to files instead of just module and function')
     parser.add_argument("--withThreads", action="store_true", help='print process and thread name')
     parser.add_argument("-f", "--follow", action="store_true", help='follow file forever', default=False)
-    parser.add_argument("-l", "--localtime", action="store_true", help='print logs in localtime (default utc)', default=False)
+    parser.add_argument("-u", "--utctime", action="store_true", help='print logs in utc time (default localtime)', default=False)
     parser.add_argument("--setLocaltimeOffset", type=int, help='set custom localtime offset in hours')
     parser.add_argument("--restoreLocaltimeOffset", action="store_true", help='restore localtime offset to machine\'s offset')
     parser.add_argument("-i", "--ignoreExtensions", nargs="+",  help="list extensions that you don\'t want to read", default=[".gz"])
@@ -337,7 +337,7 @@ if __name__ == "__main__":
     formatter = Formatter(
         noDebug=args.noDebug, relativeTime=args.relativeTime, noColors=args.noColors,
         microsecondPrecision=args.microsecondPrecision, showFullPaths=args.showFullPaths,
-        withThreads=args.withThreads, localTime=args.localtime)
+        withThreads=args.withThreads, utctime=args.utctime)
 
     def _exitOrderlyOnCtrlC(signal, frame):
         sys.exit(0)
