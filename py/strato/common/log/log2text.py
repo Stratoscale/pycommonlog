@@ -8,6 +8,8 @@ import logging
 import yaml
 import glob
 import strato.common.log.morelevels
+import socket
+import subprocess
 import re
 import gzip
 from strato.common.log import lineparse
@@ -40,6 +42,7 @@ COLOR_OFF = "\033[0;0m"
 LOG_CONFIG_FILE_PATH = "/etc/stratoscale/strato-log.conf"
 HIGHEST_PRIORITY = 0
 EPOCH_HOUR = 3600
+
 
 class Formatter:
     _COLORS = {logging.PROGRESS: CYAN, logging.ERROR: RED, logging.WARNING: YELLOW}
@@ -164,8 +167,8 @@ def follow_generator(istream):
         time.sleep(0.1)
 
 
-def printLog(logFile, formatter, follow):
-    inputStream = sys.stdin if logFile == "-" else universalOpen(logFile, 'r')
+def printLog(logFile, formatter, follow, tail):
+    inputStream = sys.stdin if logFile == "-" else universalOpen(logFile, 'r', tail=tail)
     logTypeConf = formatter._getLogTypeConf(logFile)
     if follow:
         inputStream = follow_generator(inputStream)
@@ -205,8 +208,8 @@ def _getColorCode(id):
     return MULTY_LOG_COLORS[id % (len(MULTY_LOG_COLORS) - 1)]
 
 
-def printLogs(logFiles, formatter):
-    inputStreams = [(universalOpen(logFile, 'r'), logFile) for logFile in logFiles]
+def printLogs(logFiles, formatter, tail):
+    inputStreams = [(universalOpen(logFile, 'r', tail=tail), logFile) for logFile in logFiles]
 
     currentLines= [_getNextParsableEntry(inputStream, logFile, _getColorCode(streamId), formatter)
                    for streamId, (inputStream, logFile) in enumerate(inputStreams)]
@@ -241,14 +244,26 @@ def updateConfFile(field, value):
     os.system('sudo mv /tmp/stratolog-conf.tmp %s' % LOG_CONFIG_FILE_PATH)
 
 
-def universalOpen(filePath, mode='r'):
+def universalOpen(filePath, mode='r', tail=0):
     if filePath.endswith('.gz'):
-        return gzip.GzipFile(filePath, mode)
+        fileObj = gzip.GzipFile(filePath, mode)
     else:
-        return open(filePath, mode)
+        if tail > 0:
+            fileObj = tailFile(filePath, tail)
+        else:
+            fileObj = open(filePath, mode)
+    return fileObj
 
-def ping(host):
-    return os.system("ping -c 1 %s > /dev/null 2>&1" % host) == 0
+def tailFile(filePath, n):
+    p = subprocess.Popen(["tail", "-n", str(n), filePath], stdout=subprocess.PIPE)
+    return p.stdout
+
+def resolveHostname(host):
+    try:
+        socket.gethostbyname(host)
+        return True
+    except:
+        return False
 
 def runRemotely(host, ignoreArgs):
     try:
@@ -260,25 +275,35 @@ def runRemotely(host, ignoreArgs):
     args = [arg for arg in sys.argv[1:] if arg not in ignoreArgs]
     command = "strato-log %s" % ' '.join(args)
 
-    sshCommand = 'sshpass -p %(password)s ssh -o ServerAliveInterval=5 -o ServerAliveCountMax=1 -o ' \
-                 'StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null %(hostname)s %(command)s | less -r'
-    hostname = "%(user)s@%(hostname)s" % dict(user=configFile.get("defaultRemoteUser", 'root'),
-                                              hostname=findHostname(host))
+    user = configFile.get("defaultRemoteUser", 'root')
+    password = configFile.get("defaultRemotePassword", 'password')
+
+    possibleResolveSuffixes = configFile.get("possibleResolveSuffixes", [])
+    hostname = findHostname(host, possibleResolveSuffixes)
+    if hostname == None:
+        print "No reachable host was found for %s" % host
+        return 1
+
+    host = "%(user)s@%(hostname)s" % dict(user=user,
+                                          hostname=hostname)
+
+    sshCommand = 'sshpass -p %(password)s ssh -X -f -o ServerAliveInterval=5 -o ServerAliveCountMax=1 -o ' \
+                 'StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null %(host)s %(command)s | less -r'
 
     os.system(sshCommand % dict(command=command,
-                                hostname=hostname,
-                                password=configFile.get("defaultRemotePassword", 'password')))
+                                host=host,
+                                password=password))
+    return 0
 
-def findHostname(host):
-    possibleSuffixes = ['.service.strato', '.node.strato']
-    if ping(host):
+def findHostname(host, possibleResolveSuffixes):
+    if resolveHostname(host):
         return host
     else:
-        for suffix in possibleSuffixes:
-            if ping(host + suffix):
+        for suffix in possibleResolveSuffixes:
+            if resolveHostname(host + suffix):
                 return host + suffix
-    print "No reachable host was found for %s" % host
-    exit(1)
+    return None
+
 
 class LogPathFinder:
     def __init__(self, confFile):
@@ -332,6 +357,19 @@ class LogPathFinder:
         for filePath in self.confFile['defaultPaths']:
             self.defaultPaths.extend(glob.glob(filePath))
 
+def executeRemotely(args):
+    if args.user != None:
+        updateConfFile('defaultRemoteUser', args.user)
+        ignoreArgs.extend(['-u', '--user', args.user])
+
+    if args.password != None:
+        updateConfFile('defaultRemotePassword', args.password)
+        ignoreArgs.extend(['-p', '--password', args.password])
+
+    ignoreArgs.extend(['-n', '--node', args.node])
+    return runRemotely(args.node, ignoreArgs)
+
+
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
@@ -357,27 +395,16 @@ if __name__ == "__main__":
     parser.add_argument("-p", "--password", type=str, help='set default remote password to connect with', default=None)
     parser.add_argument("-u", "--user", type=str, help='set default remote user to connect to', default=None)
     parser.add_argument("--restoreLocaltimeOffset", action="store_true", help='restore localtime offset to machine\'s offset')
-    parser.add_argument("-t", "--tail", type=int, help='print n last lines only')
+    parser.add_argument("-t", "--tail", type=int, help='print n last lines only', default=0)
 
     args, unknown = parser.parse_known_args()
     ignoreArgs = []
 
     actionHappened = False
 
-    if args.user != None:
-        updateConfFile('defaultRemoteUser', args.user)
-        ignoreArgs.extend(['-u', '--user', args.user])
-        actionHappened = True
-
-    if args.password != None:
-        updateConfFile('defaultRemotePassword', args.password)
-        ignoreArgs.extend(['-p', '--password', args.password])
-        actionHappened = True
-
     if args.node != None:
-        ignoreArgs.extend(['-n', '--node', args.node])
-        runRemotely(args.node, ignoreArgs)
-        exit(0)
+        exit(executeRemotely(args))
+
     elif unknown:
         for arg in unknown:
             print "Not a valid argument \"%s\"" % arg
@@ -412,9 +439,9 @@ if __name__ == "__main__":
         ignoreExtensions = args.ignoreExtensions
     logFiles = logFinder.findLogFiles(args.logFiles, ignoreExtensions)
     if len(logFiles) == 1:
-        printLog(logFile=logFiles[0], formatter=formatter, follow=args.follow)
+        printLog(logFile=logFiles[0], formatter=formatter, follow=args.follow, tail=args.tail)
     else:
-        printLogs(logFiles=logFiles, formatter=formatter)
+        printLogs(logFiles=logFiles, formatter=formatter, tail=args.tail)
 
     if not args.logFiles and not actionHappened:
         print 'No files were provided'
