@@ -12,6 +12,7 @@ import socket
 import subprocess
 import re
 import gzip
+import select
 from strato.common.log import lineparse
 
 
@@ -168,8 +169,13 @@ def follow_generator(istream):
 
 
 def printLog(logFile, formatter, follow, tail):
-    inputStream = sys.stdin if logFile == "-" else universalOpen(logFile, 'r', tail=tail)
-    logTypeConf = formatter._getLogTypeConf(logFile)
+    if logFile:
+        inputStream = universalOpen(logFile[0], 'r', tail=tail)
+        logTypeConf = formatter._getLogTypeConf(logFile[0])
+    else:
+        inputStream = sys.stdin
+        logTypeConf = None
+
     if follow:
         inputStream = follow_generator(inputStream)
     for line in inputStream:
@@ -313,7 +319,9 @@ class LogPathFinder:
             pass
         self.defaultPaths = []
 
-    def findLogFiles(self, providedPaths, extensionsToIgnore):
+    def findLogFiles(self, providedPaths, extensionsToIgnore, showAll=False):
+        if showAll:
+            extensionsToIgnore = []
         logsToRead = []
         [logsToRead.append(filePath) if os.path.isfile(filePath) else
          logsToRead.extend(self._tryToMatchShortcut(filePath, extensionsToIgnore)) for filePath in providedPaths]
@@ -373,7 +381,7 @@ def executeRemotely(args):
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("logFiles", metavar='logFile', nargs='*', help='logfiles to read or - for stdin')
+    parser.add_argument("logFiles", metavar='logFile', nargs='*', help='logfiles to read')
     parser.add_argument('-d', "--noDebug", action='store_true', help='filter out debug messages')
     parser.add_argument('-r', "--relativeTime", action='store_true', help='print relative time, not absolute')
     parser.add_argument('-C', "--noColors", action='store_true', help='force monochromatic output even on a TTY')
@@ -400,7 +408,14 @@ if __name__ == "__main__":
     args, unknown = parser.parse_known_args()
     ignoreArgs = []
 
-    actionHappened = False
+    if select.select([sys.stdin,],[],[],0.0)[0]:
+        stdin = True
+    else:
+        stdin = False
+
+    if len(sys.argv) <= 1 and not stdin:
+        print 'No input was provided'
+        exit(1)
 
     if args.node != None:
         exit(executeRemotely(args))
@@ -412,11 +427,9 @@ if __name__ == "__main__":
 
     if args.setLocaltimeOffset != None:
         updateConfFile('defaultTimezone', args.setLocaltimeOffset)
-        actionHappened = True
 
     if args.restoreLocaltimeOffset == True:
         updateConfFile('defaultTimezone', None)
-        actionHappened = True
 
     if _runningInATerminal and not args.noLess:
         args = " ".join(["'%s'" % a for a in sys.argv[1:]])
@@ -432,16 +445,15 @@ if __name__ == "__main__":
     def _exitOrderlyOnCtrlC(signal, frame):
         sys.exit(0)
     signal.signal(signal.SIGINT, _exitOrderlyOnCtrlC)
-    logFinder = LogPathFinder(LOG_CONFIG_FILE_PATH)
-    if args.showAll:
-        ignoreExtensions = []
+    if args.logFiles:
+        logFinder = LogPathFinder(LOG_CONFIG_FILE_PATH)
+        logFiles = logFinder.findLogFiles(args.logFiles, args.ignoreExtensions, args.showAll)
     else:
-        ignoreExtensions = args.ignoreExtensions
-    logFiles = logFinder.findLogFiles(args.logFiles, ignoreExtensions)
-    if len(logFiles) == 1:
-        printLog(logFile=logFiles[0], formatter=formatter, follow=args.follow, tail=args.tail)
+        logFiles = []
+
+    if stdin or len(logFiles) == 1:
+    # use this function in case there is a single file read or there is something in stdin (single stream)
+        printLog(logFile=logFiles, formatter=formatter, follow=args.follow, tail=args.tail)
     else:
         printLogs(logFiles=logFiles, formatter=formatter, tail=args.tail)
 
-    if not args.logFiles and not actionHappened:
-        print 'No files were provided'
