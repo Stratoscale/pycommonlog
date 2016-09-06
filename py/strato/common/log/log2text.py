@@ -12,6 +12,7 @@ import socket
 import subprocess
 import re
 import gzip
+import select
 from strato.common.log import lineparse
 
 
@@ -168,8 +169,14 @@ def follow_generator(istream):
 
 
 def printLog(logFile, formatter, follow, tail):
-    inputStream = sys.stdin if logFile == "-" else universalOpen(logFile, 'r', tail=tail)
-    logTypeConf = formatter._getLogTypeConf(logFile)
+    if not logFile and select.select([sys.stdin,],[],[],0.0)[0]:
+        inputStream = sys.stdin
+        logTypeConf = None
+    elif logFile:
+        inputStream = universalOpen(logFile[0], 'r', tail=tail)
+        logTypeConf = formatter._getLogTypeConf(logFile[0])
+    else:
+        return
     if follow:
         inputStream = follow_generator(inputStream)
     for line in inputStream:
@@ -399,9 +406,9 @@ if __name__ == "__main__":
 
     args, unknown = parser.parse_known_args()
     ignoreArgs = []
-
-    actionHappened = False
-
+    if len(sys.argv) <= 1 and not select.select([sys.stdin,],[],[],0.0)[0]:
+        print 'No files were provided'
+        exit(1)
     if args.node != None:
         exit(executeRemotely(args))
 
@@ -412,11 +419,9 @@ if __name__ == "__main__":
 
     if args.setLocaltimeOffset != None:
         updateConfFile('defaultTimezone', args.setLocaltimeOffset)
-        actionHappened = True
 
     if args.restoreLocaltimeOffset == True:
         updateConfFile('defaultTimezone', None)
-        actionHappened = True
 
     if _runningInATerminal and not args.noLess:
         args = " ".join(["'%s'" % a for a in sys.argv[1:]])
@@ -438,10 +443,8 @@ if __name__ == "__main__":
     else:
         ignoreExtensions = args.ignoreExtensions
     logFiles = logFinder.findLogFiles(args.logFiles, ignoreExtensions)
-    if len(logFiles) == 1:
-        printLog(logFile=logFiles[0], formatter=formatter, follow=args.follow, tail=args.tail)
+    if len(logFiles) <= 1:
+        printLog(logFile=logFiles, formatter=formatter, follow=args.follow, tail=args.tail)
     else:
         printLogs(logFiles=logFiles, formatter=formatter, tail=args.tail)
 
-    if not args.logFiles and not actionHappened:
-        print 'No files were provided'
