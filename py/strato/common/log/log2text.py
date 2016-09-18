@@ -264,11 +264,18 @@ def tailFile(filePath, n):
     p = subprocess.Popen(["tail", "-n", str(n), filePath], stdout=subprocess.PIPE)
     return p.stdout
 
-def resolveHostname(host):
+def checkSshConnectivity(host):
     try:
-        socket.gethostbyname(host)
+        ip = socket.gethostbyname(host)
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(10)
+        s.connect((ip, 22))
+        s.close()
         return True
-    except:
+    except Exception as e:
+        if e.message == "timed out":
+            print "Connection has timed out on host %s" % host
+            s.close()
         return False
 
 def runRemotely(host, ignoreArgs):
@@ -294,7 +301,8 @@ def runRemotely(host, ignoreArgs):
                                           hostname=hostname)
 
     sshCommand = 'sshpass -p %(password)s ssh -X -f -o ServerAliveInterval=5 -o ServerAliveCountMax=1 -o ' \
-                 'StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null %(host)s %(command)s | less -r'
+                 'StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 ' \
+                 '%(host)s %(command)s | less -r'
 
     os.system(sshCommand % dict(command=command,
                                 host=host,
@@ -302,11 +310,11 @@ def runRemotely(host, ignoreArgs):
     return 0
 
 def findHostname(host, possibleResolveSuffixes):
-    if resolveHostname(host):
+    if checkSshConnectivity(host):
         return host
     else:
         for suffix in possibleResolveSuffixes:
-            if resolveHostname(host + suffix):
+            if checkSshConnectivity(host + suffix):
                 return host + suffix
     return None
 
