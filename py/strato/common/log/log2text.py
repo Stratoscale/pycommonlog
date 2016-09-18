@@ -265,11 +265,18 @@ def tailFile(filePath, n):
     p = subprocess.Popen(["tail", "-n", str(n), filePath], stdout=subprocess.PIPE)
     return p.stdout
 
-def resolveHostname(host):
+def checkSshConnectivity(host):
     try:
-        socket.gethostbyname(host)
+        ip = socket.gethostbyname(host)
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(10)
+        s.connect((ip, 22))
+        s.close()
         return True
-    except:
+    except Exception as e:
+        if e.message == "timed out":
+            print "Connection has timed out"
+            s.close()
         return False
 
 def runRemotely(host, ignoreArgs):
@@ -303,11 +310,11 @@ def runRemotely(host, ignoreArgs):
     return 0
 
 def findHostname(host, possibleResolveSuffixes):
-    if resolveHostname(host):
+    if checkSshConnectivity(host):
         return host
     else:
         for suffix in possibleResolveSuffixes:
-            if resolveHostname(host + suffix):
+            if checkSshConnectivity(host + suffix):
                 return host + suffix
     return None
 
