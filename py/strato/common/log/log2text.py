@@ -51,7 +51,7 @@ class Formatter:
 
     converter = time.gmtime
 
-    def __init__(self, relativeTime, withThreads, showFullPaths, noDebug, microsecondPrecision, noColors, utc=False, sinceTime=None, untilTime="01/01/2025"):
+    def __init__(self, relativeTime, withThreads, showFullPaths, minimumLevel, microsecondPrecision, noColors, utc=False, sinceTime=None, untilTime="01/01/2025"):
         try:
             self.configFile = yaml.load(open(LOG_CONFIG_FILE_PATH, 'r').read())
             if self.configFile['defaultTimezone'] != None:
@@ -64,7 +64,7 @@ class Formatter:
         self._firstClock = None
         self._clock = self._relativeClock if relativeTime else self._absoluteClock
         self._relativeClockFormat = "%.6f" if microsecondPrecision else "%.3f"
-        self._minimumLevel = logging.INFO if noDebug else logging.DEBUG
+        self._minimumLevel = minimumLevel
         if sinceTime:
             self._sinceTime = int(time.mktime(dateparser.parse(sinceTime).timetuple()))
         else:
@@ -234,7 +234,7 @@ def printLogs(logFiles, formatter, tail):
         _, nextStreamId, formatted = min((line[1], streamId, line[0])
                                          for streamId, line in enumerate(currentLines) if line is not None)
         if formatted is not None:
-            # prevent printing the Broken Pipe error when 'less' is quitted
+            # prevent printing the Broken Pipe error when 'less' is quit
             try:
                 print formatted
             except IOError as e:
@@ -396,11 +396,28 @@ def executeRemotely(args):
     return runRemotely(args.node, ignoreArgs)
 
 
+def minimumLevel(minLevel, noDebug):
+    if minLevel is None:
+        return logging.INFO if noDebug else logging.DEBUG
+    level_dict = {'debug': logging.DEBUG,
+                  'info': logging.INFO,
+                  'warning': logging.WARNING,
+                  'error': logging.ERROR,
+                  'progress': logging.PROGRESS,
+                  'success': logging.SUCCESS,
+                  'step': logging.STEP}
+    for string, level in level_dict.iteritems():
+        if string.startswith(minLevel.lower()):
+            return level
+    return logging.DEBUG
+
+
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("logFiles", metavar='logFile', nargs='*', help='logfiles to read')
     parser.add_argument('-d', "--noDebug", action='store_true', help='filter out debug messages')
+    parser.add_argument('-l', '--min-level', action='store', default='', help='minimal log level to display (substring is OK, case-insensitive)')
     parser.add_argument('-r', "--relativeTime", action='store_true', help='print relative time, not absolute')
     parser.add_argument('-C', "--noColors", action='store_true', help='force monochromatic output even on a TTY')
     parser.add_argument('-L',
@@ -458,7 +475,7 @@ if __name__ == "__main__":
         sys.exit(result)
 
     formatter = Formatter(
-        noDebug=args.noDebug, relativeTime=args.relativeTime, noColors=args.noColors,
+        minimumLevel=minimumLevel(args.min_level, args.noDebug), relativeTime=args.relativeTime, noColors=args.noColors,
         microsecondPrecision=args.microsecondPrecision, showFullPaths=args.showFullPaths,
         withThreads=args.withThreads, utc=args.utc, sinceTime=args.since, untilTime=args.until)
 
