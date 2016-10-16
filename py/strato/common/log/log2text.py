@@ -13,6 +13,7 @@ import subprocess
 import re
 import gzip
 import select
+import dateparser
 from strato.common.log import lineparse
 
 
@@ -50,7 +51,7 @@ class Formatter:
 
     converter = time.gmtime
 
-    def __init__(self, relativeTime, withThreads, showFullPaths, noDebug, microsecondPrecision, noColors, utc=False):
+    def __init__(self, relativeTime, withThreads, showFullPaths, noDebug, microsecondPrecision, noColors, utc=False, sinceTime=None, untilTime="01/01/2025"):
         try:
             self.configFile = yaml.load(open(LOG_CONFIG_FILE_PATH, 'r').read())
             if self.configFile['defaultTimezone'] != None:
@@ -64,7 +65,11 @@ class Formatter:
         self._clock = self._relativeClock if relativeTime else self._absoluteClock
         self._relativeClockFormat = "%.6f" if microsecondPrecision else "%.3f"
         self._minimumLevel = logging.INFO if noDebug else logging.DEBUG
-
+        if sinceTime:
+            self._sinceTime = int(time.mktime(dateparser.parse(sinceTime).timetuple()))
+        else:
+            self._sinceTime = 0
+        self._untilTime = int(time.mktime(dateparser.parse(untilTime).timetuple()))
         self._exceptionLogsFileColorMapping = {}
         useColors = False if noColors else _runningInATerminal()
         if not utc:
@@ -79,15 +84,20 @@ class Formatter:
             ("(%(pathname)s:%(lineno)s)" if showFullPaths else "(%(module)s::%(funcName)s:%(lineno)s)")
 
     def process(self, line, logTypeConf=None):
+        formatted, timestamp = None, None
         try:
             parsed = json.loads(line)
             if 'msg' in parsed:
-                return self._processStratolog(line)
+                formatted, timestamp = self._processStratolog(line)
             elif 'message' in parsed:
-                return self._processExceptionLog(line)
+                formatted, timestamp = self._processExceptionLog(line)
         except:
-            pass
-        return self._processGenericLog(line, logTypeConf)
+            formatted, timestamp = self._processGenericLog(line, logTypeConf)
+
+        if timestamp >= self._sinceTime and (timestamp <= self._untilTime or self._untilTime == -1):
+            return formatted, timestamp
+        else:
+            return None, None
 
     def _getLogTypeConf(self, logPath):
         try:
@@ -412,6 +422,8 @@ if __name__ == "__main__":
     parser.add_argument("-u", "--user", type=str, help='set default remote user to connect to', default=None)
     parser.add_argument("--restoreLocaltimeOffset", action="store_true", help='restore localtime offset to machine\'s offset')
     parser.add_argument("-t", "--tail", type=int, help='print n last lines only', default=0)
+    parser.add_argument("--since", type=str, help='Show entries not older than the specified date. example 1h, 5m, two hours ago')
+    parser.add_argument("--until", type=str, help='Show entries not newer than the specified date. example 0.5h, 4m, one hour ago', default="01/01/2025")
 
     args, unknown = parser.parse_known_args()
     ignoreArgs = []
@@ -448,7 +460,7 @@ if __name__ == "__main__":
     formatter = Formatter(
         noDebug=args.noDebug, relativeTime=args.relativeTime, noColors=args.noColors,
         microsecondPrecision=args.microsecondPrecision, showFullPaths=args.showFullPaths,
-        withThreads=args.withThreads, utc=args.utc)
+        withThreads=args.withThreads, utc=args.utc, sinceTime=args.since, untilTime=args.until)
 
     def _exitOrderlyOnCtrlC(signal, frame):
         sys.exit(0)
