@@ -46,7 +46,7 @@ HIGHEST_PRIORITY = 0
 EPOCH_HOUR = 3600
 
 
-class Formatter:
+class Formatter(object):
     _COLORS = {logging.PROGRESS: CYAN, logging.ERROR: RED, logging.WARNING: YELLOW}
 
     converter = time.gmtime
@@ -71,16 +71,16 @@ class Formatter:
             self._sinceTime = 0
         self._untilTime = int(time.mktime(dateparser.parse(untilTime).timetuple()))
         self._exceptionLogsFileColorMapping = {}
-        useColors = False if noColors else _runningInATerminal()
+        self.useColors = not noColors
         if not utc:
             self.converter = time.localtime
         self._logFormat = \
             "%(log2text_clock)s " + \
             ('%(process)s%(threadName)s:' if withThreads else '') + \
-            ('%(log2text_colorPrefix)s' if useColors else '') + \
+            ('%(log2text_colorPrefix)s' if self.useColors else '') + \
             "%(levelname)-7s " + \
             "%(message)s" + \
-            (NORMAL_COLOR if useColors else '') + \
+            (NORMAL_COLOR if self.useColors else '') + \
             ("(%(pathname)s:%(lineno)s)" if showFullPaths else "(%(module)s::%(funcName)s:%(lineno)s)")
 
     def process(self, line, logTypeConf=None):
@@ -153,7 +153,7 @@ class Formatter:
             self._exceptionLogsFileColorMapping[logPath] = _getColorCode(len(self._exceptionLogsFileColorMapping))
         logTypeConf = self._getLogTypeConf(logPath)
         line, timestamp = self.process(line, logTypeConf)
-        return _addLogName(line, self._exceptionLogsFileColorMapping[logPath], logPath), timestamp
+        return _addLogName(line, self._exceptionLogsFileColorMapping[logPath], logPath, self.useColors), timestamp
 
     def _relativeClock(self, created):
         if self._firstClock is None:
@@ -163,10 +163,6 @@ class Formatter:
     def _absoluteClock(self, created):
         msec = (created - long(created)) * 1000
         return '%s.%.03d' % (time.strftime(TIME_FORMAT, self.converter(created)), msec)
-
-
-def _runningInATerminal():
-    return sys.stdout.isatty()
 
 
 def follow_generator(istream):
@@ -201,8 +197,8 @@ def printLog(logFile, formatter, follow, tail):
             print "Failed to parse record '%s' " % line
 
 
-def _addLogName(line, colorCode, logFile):
-    return "%s %s(%s)%s" % (line, colorCode, os.path.basename(logFile), COLOR_OFF)
+def _addLogName(line, colorCode, logFile, useColors):
+    return "%s %s(%s)%s" % (line, colorCode if useColors else '', os.path.basename(logFile), COLOR_OFF if useColors else '')
 
 def _getNextParsableEntry(inputStream, logFile, colorCode, formatter):
     """
@@ -214,7 +210,7 @@ def _getNextParsableEntry(inputStream, logFile, colorCode, formatter):
         try:
             line = inputStream.next()
             formatted, timestamp = formatter.process(line, logTypeConf)
-            return None if formatted is None else _addLogName(formatted, colorCode, logFile), timestamp
+            return None if formatted is None else _addLogName(formatted, colorCode, logFile, formatter.useColors), timestamp
         except StopIteration:
             return None
         except:
@@ -467,10 +463,10 @@ if __name__ == "__main__":
     if args.restoreLocaltimeOffset == True:
         updateConfFile('defaultTimezone', None)
 
-    if _runningInATerminal and not args.noLess:
+    if not args.noLess:
         args = " ".join(["'%s'" % a for a in sys.argv[1:]])
         result = os.system(
-            "python -m strato.common.log.log2text %s --noLess | less --quit-if-one-screen --RAW-CONTROL-CHARS" % args)
+            "python -m strato.common.log.log2text %s --noLess | less -r --quit-if-one-screen --RAW-CONTROL-CHARS" % args)
         sys.exit(result)
 
     formatter = Formatter(
