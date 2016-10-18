@@ -295,7 +295,7 @@ def runRemotely(host, ignoreArgs):
         configFile = {}
         print "Configuration file was not found"
 
-    args = [arg for arg in sys.argv[1:] if arg not in ignoreArgs]
+    args = ['\\"%s\\"' % arg for arg in sys.argv[1:] if arg not in ignoreArgs]
     command = "strato-log %s" % ' '.join(args)
 
     user = configFile.get("defaultRemoteUser", 'root')
@@ -313,7 +313,6 @@ def runRemotely(host, ignoreArgs):
     sshCommand = 'sshpass -p %(password)s ssh -X -f -o ServerAliveInterval=5 -o ServerAliveCountMax=1 -o ' \
                  'StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 ' \
                  '%(host)s %(command)s | less -r'
-
     os.system(sshCommand % dict(command=command,
                                 host=host,
                                 password=password))
