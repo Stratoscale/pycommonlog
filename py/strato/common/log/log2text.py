@@ -51,7 +51,7 @@ class Formatter:
 
     converter = time.gmtime
 
-    def __init__(self, relativeTime, withThreads, showFullPaths, noDebug, microsecondPrecision, noColors, utc=False, sinceTime=None, untilTime="01/01/2025"):
+    def __init__(self, relativeTime, withThreads, showFullPaths, minimumLevel, microsecondPrecision, noColors, utc=False, sinceTime=None, untilTime="01/01/2025"):
         try:
             self.configFile = yaml.load(open(LOG_CONFIG_FILE_PATH, 'r').read())
             if self.configFile['defaultTimezone'] != None:
@@ -64,7 +64,7 @@ class Formatter:
         self._firstClock = None
         self._clock = self._relativeClock if relativeTime else self._absoluteClock
         self._relativeClockFormat = "%.6f" if microsecondPrecision else "%.3f"
-        self._minimumLevel = logging.INFO if noDebug else logging.DEBUG
+        self._minimumLevel = minimumLevel
         if sinceTime:
             self._sinceTime = int(time.mktime(dateparser.parse(sinceTime).timetuple()))
         else:
@@ -234,7 +234,7 @@ def printLogs(logFiles, formatter, tail):
         _, nextStreamId, formatted = min((line[1], streamId, line[0])
                                          for streamId, line in enumerate(currentLines) if line is not None)
         if formatted is not None:
-            # prevent printing the Broken Pipe error when 'less' is quitted
+            # prevent printing the Broken Pipe error when 'less' is quit
             try:
                 print formatted
             except IOError as e:
@@ -295,7 +295,7 @@ def runRemotely(host, ignoreArgs):
         configFile = {}
         print "Configuration file was not found"
 
-    args = [arg for arg in sys.argv[1:] if arg not in ignoreArgs]
+    args = ['\\"%s\\"' % arg for arg in sys.argv[1:] if arg not in ignoreArgs]
     command = "strato-log %s" % ' '.join(args)
 
     user = configFile.get("defaultRemoteUser", 'root')
@@ -313,7 +313,6 @@ def runRemotely(host, ignoreArgs):
     sshCommand = 'sshpass -p %(password)s ssh -X -f -o ServerAliveInterval=5 -o ServerAliveCountMax=1 -o ' \
                  'StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 ' \
                  '%(host)s %(command)s | less -r'
-
     os.system(sshCommand % dict(command=command,
                                 host=host,
                                 password=password))
@@ -396,11 +395,28 @@ def executeRemotely(args):
     return runRemotely(args.node, ignoreArgs)
 
 
+def minimumLevel(minLevel, noDebug):
+    if minLevel is None:
+        return logging.INFO if noDebug else logging.DEBUG
+    level_dict = {'debug': logging.DEBUG,
+                  'info': logging.INFO,
+                  'warning': logging.WARNING,
+                  'error': logging.ERROR,
+                  'progress': logging.PROGRESS,
+                  'success': logging.SUCCESS,
+                  'step': logging.STEP}
+    for string, level in level_dict.iteritems():
+        if string.startswith(minLevel.lower()):
+            return level
+    return logging.DEBUG
+
+
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("logFiles", metavar='logFile', nargs='*', help='logfiles to read')
     parser.add_argument('-d', "--noDebug", action='store_true', help='filter out debug messages')
+    parser.add_argument('-l', '--min-level', action='store', default='', metavar='LEVEL', help='minimal log level to display (substring is OK, case-insensitive)')
     parser.add_argument('-r', "--relativeTime", action='store_true', help='print relative time, not absolute')
     parser.add_argument('-C', "--noColors", action='store_true', help='force monochromatic output even on a TTY')
     parser.add_argument('-L',
@@ -413,17 +429,17 @@ if __name__ == "__main__":
         help='show full path to files instead of just module and function')
     parser.add_argument("--withThreads", action="store_true", help='print process and thread name')
     parser.add_argument("-f", "--follow", action="store_true", help='follow file forever', default=False)
-    parser.add_argument("-U", "--utc", action="store_true", help='print logs in utc time (default localtime)', default=False)
-    parser.add_argument("--setLocaltimeOffset", type=int, help='set custom localtime offset in hours')
-    parser.add_argument("-i", "--ignoreExtensions", nargs="+",  help="list extensions that you don\'t want to read", default=[".gz"])
+    parser.add_argument("-U", "--utc", action="store_true", help='print logs in UTC time (default: localtime)', default=False)
+    parser.add_argument("--setLocaltimeOffset", type=int, metavar='HOURS', help='set custom localtime offset in hours')
+    parser.add_argument("-i", "--ignoreExtensions", nargs="+", metavar='EXT', help="list extensions that you don\'t want to read", default=[".gz"])
     parser.add_argument("-a", "--showAll", action="store_true", help='show all logs', default=False)
-    parser.add_argument("-n", "--node", type=str, help='run strato-log on remote node (possible input is host name or service with dns resolve', default=None)
+    parser.add_argument("-n", "--node", type=str, help='run strato-log on remote node (possible input is host name or service with DNS resolve', default=None)
     parser.add_argument("-p", "--password", type=str, help='set default remote password to connect with', default=None)
-    parser.add_argument("-u", "--user", type=str, help='set default remote user to connect to', default=None)
+    parser.add_argument("-u", "--user", type=str, help='set default remote user to connect with', default=None)
     parser.add_argument("--restoreLocaltimeOffset", action="store_true", help='restore localtime offset to machine\'s offset')
-    parser.add_argument("-t", "--tail", type=int, help='print n last lines only', default=0)
-    parser.add_argument("--since", type=str, help='Show entries not older than the specified date. example 1h, 5m, two hours ago')
-    parser.add_argument("--until", type=str, help='Show entries not newer than the specified date. example 0.5h, 4m, one hour ago', default="01/01/2025")
+    parser.add_argument("-t", "--tail", type=int, metavar='n', help='print n last lines only', default=0)
+    parser.add_argument("--since", type=str, metavar='DATE', help='Show entries not older than the specified date (e.g., 1h, 5m, two hours ago, 8/aug/1997)')
+    parser.add_argument("--until", type=str, metavar='DATE', help='Show entries not newer than the specified date (e.g., 0.5h, 4m, one hour ago)', default="01/01/2025")
 
     args, unknown = parser.parse_known_args()
     ignoreArgs = []
@@ -458,7 +474,7 @@ if __name__ == "__main__":
         sys.exit(result)
 
     formatter = Formatter(
-        noDebug=args.noDebug, relativeTime=args.relativeTime, noColors=args.noColors,
+        minimumLevel=minimumLevel(args.min_level, args.noDebug), relativeTime=args.relativeTime, noColors=args.noColors,
         microsecondPrecision=args.microsecondPrecision, showFullPaths=args.showFullPaths,
         withThreads=args.withThreads, utc=args.utc, sinceTime=args.since, untilTime=args.until)
 
