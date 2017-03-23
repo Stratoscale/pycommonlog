@@ -152,8 +152,8 @@ class Formatter(object):
     def _process_go_logs(self, line):
         go_level_colors = {'ERROR': RED, 'WARN': YELLOW, 'INFO': CYAN, 'SUCCESS': GREEN}
         parsed_line = json.loads(line)
-        level = parsed_line.pop('level').upper()
-        path = parsed_line.pop('path')
+        level = parsed_line.pop('level', 'info').upper()
+        path = parsed_line.pop('path', 'no-path')
         ts = self._get_valid_ts(parsed_line.pop('ts'))
         message = '{} '.format(ts, level)
         # colorize the message
