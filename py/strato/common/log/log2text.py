@@ -14,6 +14,7 @@ import re
 import gzip
 import select
 import dateparser
+from datetime import datetime
 from strato.common.log import lineparse
 
 
@@ -21,6 +22,7 @@ RED = '\033[31m'
 GREEN = '\033[32m'
 YELLOW = '\033[33m'
 CYAN = '\033[36m'
+GRAY = '\033[90m'
 NORMAL_COLOR = '\033[39m'
 TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 
@@ -87,10 +89,12 @@ class Formatter(object):
         formatted, timestamp = None, None
         try:
             parsed = json.loads(line)
-            if 'msg' in parsed:
+            if 'msg' in parsed and 'created' in parsed:
                 formatted, timestamp = self._processStratolog(line)
             elif 'message' in parsed:
                 formatted, timestamp = self._processExceptionLog(line)
+            else:
+                formatted, timestamp = self._process_go_logs(line)
         except:
             formatted, timestamp = self._processGenericLog(line, logTypeConf)
 
@@ -144,6 +148,36 @@ class Formatter(object):
         if parsedLine['exc_text']:
             formatted += "\n" + parsedLine['exc_text']
         return formatted, parsedLine['created']
+
+    def _process_go_logs(self, line):
+        go_level_colors = {'ERROR': RED, 'WARN': YELLOW, 'INFO': CYAN, 'SUCCESS': GREEN}
+        parsed_line = json.loads(line)
+        level = parsed_line.pop('level', 'info').upper()
+        path = parsed_line.pop('path', 'no-path')
+        ts = self._get_valid_ts(parsed_line.pop('ts'))
+        message = '{} '.format(ts, level)
+        # colorize the message
+        if level in go_level_colors:
+            message += go_level_colors[level]
+        message += '{}\t'.format(level)
+        # add key-value fields
+        message += ', '.join(['{}={}'.format(k, v) for k, v in parsed_line.iteritems() if v != ''])
+        # add and colorize the file name
+        message += GRAY + ' ({})'.format(re.sub(r"^/", "", path))
+        return message, time.mktime(ts.timetuple())
+
+    def _get_valid_ts(self, ts):
+        time_fmt = '%Y/%m/%d-%H:%M:%S.%f'
+        try:
+            created = datetime.strptime(ts, time_fmt)
+        # currently, the year is missing in go-like log lines
+        # we probably gonna fix that in the future, but until there
+        # (and also for backwards compatibility), we will handle both cases.
+        except ValueError:
+            created = datetime.strptime('{}/{}'.format(datetime.now().year, ts), time_fmt)
+            if created > datetime.now():
+                created = datetime.strptime('{}/{}'.format(datetime.now().year-1, ts), time_fmt)
+        return created
 
     def _processExceptionLog(self, line):
         parsedLine = json.loads(line)
