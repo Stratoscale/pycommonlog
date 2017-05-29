@@ -46,6 +46,7 @@ COLOR_OFF = "\033[0;0m"
 LOG_CONFIG_FILE_PATH = "/etc/stratoscale/strato-log.conf"
 HIGHEST_PRIORITY = 0
 EPOCH_HOUR = 3600
+CACHED_ALL_NODES_LOG_FOLDER = "/var/log/inspector/strato_log"
 
 
 class Formatter(object):
@@ -425,6 +426,32 @@ def executeRemotely(args):
     return runRemotely(args.node, ignoreArgs)
 
 
+def copyLogFilesFromRemotes(args):
+    if not args.cached:
+        if not args.user or not args.password:
+            raise Exception("Please provide user and password")
+        command = ["inspector", "log-dump"]
+        command.extend(args.logFiles)
+        command.extend(["-q", "-u", args.user, "-p", args.password, '--clear-dst-folder'])
+        try:
+            output = subprocess.check_output(command, stderr=subprocess.STDOUT, stdin=open('/dev/null'), close_fds=True)
+        except subprocess.CalledProcessError as exc:
+            print "Failed in copying files from remotes. Command : %s\n Return Code : %s\n Exception : %s" % \
+                  (command, exc.returncode, exc.output)
+            raise
+        logFiles = output.splitlines()
+    else:
+        logFiles = findFilesInFolder(CACHED_ALL_NODES_LOG_FOLDER, args.logFiles)
+    return logFiles
+
+
+def findFilesInFolder(folder, logFiles):
+    found = []
+    for _file in logFiles:
+        found.extend([path for path in glob.glob(os.path.join(folder, "*%s*" % _file)) if os.path.isfile(path)])
+    return found
+
+
 def minimumLevel(minLevel, noDebug):
     if minLevel is None:
         return logging.INFO if noDebug else logging.DEBUG
@@ -470,6 +497,8 @@ if __name__ == "__main__":
     parser.add_argument("-t", "--tail", type=int, metavar='n', help='print n last lines only', default=0)
     parser.add_argument("--since", type=str, metavar='DATE', help='Show entries not older than the specified date (e.g., 1h, 5m, two hours ago, 8/aug/1997)')
     parser.add_argument("--until", type=str, metavar='DATE', help='Show entries not newer than the specified date (e.g., 0.5h, 4m, one hour ago)', default="01/01/2025")
+    parser.add_argument("--all-nodes", action='store_true', help='Bring asked logs from all nodes and open them')
+    parser.add_argument("--cached", action='store_true', help='Find logs in /var/log/inspector/strato_log')
 
     args, unknown = parser.parse_known_args()
     ignoreArgs = []
@@ -511,9 +540,11 @@ if __name__ == "__main__":
     def _exitOrderlyOnCtrlC(signal, frame):
         sys.exit(0)
     signal.signal(signal.SIGINT, _exitOrderlyOnCtrlC)
-    if args.logFiles:
+    if args.logFiles and not args.all_nodes:
         logFinder = LogPathFinder(LOG_CONFIG_FILE_PATH)
         logFiles = logFinder.findLogFiles(args.logFiles, args.ignoreExtensions, args.showAll)
+    elif args.logFiles and args.all_nodes:
+        logFiles = copyLogFilesFromRemotes(args)
     else:
         logFiles = []
 
@@ -522,4 +553,3 @@ if __name__ == "__main__":
         printLog(logFile=logFiles, formatter=formatter, follow=args.follow, tail=args.tail)
     else:
         printLogs(logFiles=logFiles, formatter=formatter, tail=args.tail)
-
