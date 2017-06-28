@@ -428,11 +428,12 @@ def executeRemotely(args):
 
 def copyLogFilesFromRemotes(args):
     if not args.cached:
-        if not args.user or not args.password:
-            raise Exception("Please provide user and password")
         command = ["inspector", "log-dump"]
         command.extend(args.logFiles)
-        command.extend(["-q", "-u", args.user, "-p", args.password, '--clear-dst-folder'])
+        command.extend(['-q', '--clear-dst-folder'])
+
+        if args.user and args.password:
+            command.extend(["-u", args.user, "-p", args.password])
         try:
             output = subprocess.check_output(command, stderr=subprocess.STDOUT, stdin=open('/dev/null'), close_fds=True)
         except subprocess.CalledProcessError as exc:
