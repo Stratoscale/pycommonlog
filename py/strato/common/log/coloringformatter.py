@@ -9,7 +9,25 @@ _CRITICAL = logging.CRITICAL
 _STEP = logging.STEP
 
 
-class ColoringFormatter(logging.Formatter):
+class Formatter(logging.Formatter):
+
+    LOCATION_WIDTH = 42
+
+    def _update_location(self, record):
+        max_pathname_width = self.LOCATION_WIDTH - 3 - len(str(record.lineno))
+        pathname = record.pathname
+        if len(record.pathname) > max_pathname_width:
+            pathname = record.pathname[-max_pathname_width:]
+        location = "...%s:%s" % (pathname, record.lineno)
+        record.location = location.ljust(self.LOCATION_WIDTH)
+        return record.location
+
+    def format(self, record):
+        self._update_location(record)
+        return logging.Formatter.format(self, record)
+
+
+class ColoringFormatter(Formatter):
     _RED = '\033[31m'
     _GREEN = '\033[32m'
     _YELLOW = '\033[33m'
@@ -19,7 +37,7 @@ class ColoringFormatter(logging.Formatter):
 
     STEP_COUNT = 1
 
-    def format(self, record):
+    def _update_colors(self, record):
         record.endColor = self._NORMAL_COLOR
         if record.levelno == _PROGRESS:
             record.startColor = self._CYAN
@@ -35,4 +53,8 @@ class ColoringFormatter(logging.Formatter):
             record.startColor = self._RED
         else:
             record.startColor = ""
-        return super(type(self), self).format(record)
+
+    def format(self, record):
+        self._update_colors(record)
+        self._update_location(record)
+        return logging.Formatter.format(self, record)
