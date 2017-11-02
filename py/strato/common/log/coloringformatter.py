@@ -1,6 +1,7 @@
 import logging
 import strato.common.log.morelevels
 
+_INFO = logging.INFO
 _PROGRESS = logging.PROGRESS
 _SUCCESS = logging.SUCCESS
 _WARNING = logging.WARNING
@@ -9,18 +10,40 @@ _CRITICAL = logging.CRITICAL
 _STEP = logging.STEP
 
 
-class ColoringFormatter(logging.Formatter):
+class Formatter(logging.Formatter):
+
+    LOCATION_WIDTH = 42
+
+    def _update_location(self, record):
+        max_pathname_width = self.LOCATION_WIDTH - 3 - len(str(record.lineno))
+        pathname = record.pathname
+        if len(record.pathname) > max_pathname_width:
+            pathname = record.pathname[-max_pathname_width:]
+        location = "...%s:%s" % (pathname, record.lineno)
+        record.location = location.ljust(self.LOCATION_WIDTH)
+        return record.location
+
+    def format(self, record):
+        self._update_location(record)
+        return logging.Formatter.format(self, record)
+
+
+class ColoringFormatter(Formatter):
     _RED = '\033[31m'
     _GREEN = '\033[32m'
     _YELLOW = '\033[33m'
     _CYAN = '\033[36m'
+    _LIGHT_CYAN = '\033[96m'
     _LIGHT_GREEN = '\033[92m'
+    _SALMON = '\033[91m'
     _NORMAL_COLOR = '\033[39m'
 
     STEP_COUNT = 1
 
-    def format(self, record):
+    def _update_colors(self, record):
         record.endColor = self._NORMAL_COLOR
+        if record.levelno == _INFO:
+            record.startColor = self._LIGHT_CYAN
         if record.levelno == _PROGRESS:
             record.startColor = self._CYAN
         elif record.levelno == _SUCCESS:
@@ -35,4 +58,8 @@ class ColoringFormatter(logging.Formatter):
             record.startColor = self._RED
         else:
             record.startColor = ""
-        return super(type(self), self).format(record)
+
+    def format(self, record):
+        self._update_colors(record)
+        self._update_location(record)
+        return logging.Formatter.format(self, record)
