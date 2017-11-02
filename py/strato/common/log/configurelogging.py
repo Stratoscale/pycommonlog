@@ -40,8 +40,7 @@ def configureLogging(name, forceDirectory=None, registerConfigurationReloadSigna
         hostname = subprocess.check_output('/bin/hostname').strip()
     if registerConfigurationReloadSignal:
         _configureLoggingSignalHandlers()
-    logging.info("Logging started for '%(name)s' on '%(hostname)s'", dict(
-        name=name, hostname=hostname))
+    logging.success("Logging started for '%(name)s' on '%(hostname)s'", dict(name=name, hostname=hostname))
 
 
 def configureLogger(loggerName):
@@ -104,13 +103,13 @@ def _configureOutputToScreen(logger, loggerName):
         streamHandler = logging.StreamHandler()
         atexit.register(streamHandler.close)
         if _useColorsForScreenOutput():
-            streamHandler.setFormatter(coloringformatter.ColoringFormatter(
-                '%(created).03f(%(process)d%(threadName)s):%(startColor)s%(levelname)s'
-                ': %(message)s%(endColor)s (%(pathname)s:%(lineno)d)'))
+            frmt = '%(created).03f | %(process)d%(threadName)-12s | %(startColor)s%(location)s | %(levelname)-8s| %(message)s%(endColor)s'
+            streamHandler.setFormatter(coloringformatter.ColoringFormatter(frmt))
+            # '%(created).03f(%(process)d%(threadName)s):%(startColor)s%(levelname)s: %(message)s%(endColor)s (%(pathname)s:%(lineno)d)'))
         else:
-            streamHandler.setFormatter(logging.Formatter(
-                '%(created).03f(%(process)d%(threadName)s):%(levelname)s:%(message)s '
-                '(%(pathname)s:%(lineno)d)'))
+            frmt = '%(created).03f | %(process)d%(threadName)-12s | %(location)s | %(levelname)-8s| %(message)s'
+            streamHandler.setFormatter(coloringformatter.Formatter(frmt))
+            # streamHandler.setFormatter(logging.Formatter('%(created).03f(%(process)d%(threadName)s):%(levelname)s:%(message)s (%(pathname)s:%(lineno)d)'))
         handlerName = "console_%s" % loggerName if loggerName != _name else "console"
         streamHandler.set_name(handlerName)
         streamHandler.setLevel(logging.DEBUG)
