@@ -60,7 +60,7 @@ def required():
 def data_files():
     site_packages_dir = os.path.join(sys.prefix, 'lib/python%s/site-packages' % sys.version[:3])
     pth_file = "{repo}.pth".format(repo=os.path.basename(URL))
-    return [(site_packages_dir, [pth_file])]
+    return [(site_packages_dir, [pth_file] if os.path.exists(pth_file) else ())]
 
 
 def version():

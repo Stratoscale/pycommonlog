@@ -103,7 +103,7 @@ def _configureOutputToScreen(logger, loggerName):
         streamHandler = logging.StreamHandler()
         atexit.register(streamHandler.close)
         if _useColorsForScreenOutput():
-            frmt = '%(created).03f | %(process)d%(threadName)-12s | %(startColor)s%(location)s | %(levelname)-8s| %(message)s%(endColor)s'
+            frmt = '%(startColor)s%(created).03f | %(process)d %(threadName)-12s | %(location)s | %(levelname)-8s| %(message)s%(endColor)s'
             streamHandler.setFormatter(coloringformatter.ColoringFormatter(frmt))
             # '%(created).03f(%(process)d%(threadName)s):%(startColor)s%(levelname)s: %(message)s%(endColor)s (%(pathname)s:%(lineno)d)'))
         else:
