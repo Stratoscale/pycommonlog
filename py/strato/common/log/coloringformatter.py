@@ -1,4 +1,10 @@
+import re
+import os
+import fcntl
+import termios
+import struct
 import logging
+import textwrap
 import strato.common.log.morelevels
 from strato.common.log import config
 
@@ -20,8 +26,8 @@ class Formatter(logging.Formatter):
         pathname = record.pathname
         if len(record.pathname) > max_pathname_width:
             pathname = record.pathname[-max_pathname_width:]
-        location = "...%s:%s" % (pathname, record.lineno)
-        record.location = location.ljust(self.LOCATION_WIDTH)
+        record.location = "...%s:%s" % (pathname, record.lineno)
+        record.location = record.location.ljust(self.LOCATION_WIDTH).strip()
         return record.location
 
     def format(self, record):
@@ -30,37 +36,8 @@ class Formatter(logging.Formatter):
 
 
 class ColoringFormatter(Formatter):
-    _RED = '\033[31m'
-    _GREEN = '\033[32m'
-    _YELLOW = '\033[33m'
-    _CYAN = '\033[36m'
-    _LIGHT_CYAN = '\033[96m'
-    _LIGHT_MAGENTA = '\033[95m'
-    _LIGHT_BLUE = '\033[1;34m'
-    _LIGHT_GREEN = '\033[92m'
-    _SALMON = '\033[91m'
-    _NORMAL_COLOR = '\033[39m'
 
     STEP_COUNT = 1
-
-    def __update_colors(self, record):
-        record.endColor = self._NORMAL_COLOR
-        if record.levelno == _INFO:
-            record.startColor = self._LIGHT_BLUE
-        elif record.levelno == _PROGRESS:
-            record.startColor = self._CYAN
-        elif record.levelno == _SUCCESS:
-            record.startColor = self._GREEN
-        elif record.levelno == _WARNING:
-            record.startColor = self._YELLOW
-        elif record.levelno == _STEP:
-            record.startColor = self._LIGHT_GREEN
-            record.levelname = "STEP [%d]" % self.STEP_COUNT
-            self.STEP_COUNT += 1
-        elif record.levelno == _ERROR or record.levelno == _CRITICAL:
-            record.startColor = self._RED
-        else:
-            record.startColor = ""
 
     def _update_colors(self, record):
         record.endColor = config.COLORS['REGULAR']
@@ -84,4 +61,39 @@ class ColoringFormatter(Formatter):
     def format(self, record):
         self._update_colors(record)
         self._update_location(record)
-        return logging.Formatter.format(self, record)
+        result = logging.Formatter.format(self, record)
+        if len(escape_ansi(result)) > get_terminal_size()[0]:
+            result = textwrap.fill(result, width=get_terminal_size()[0], subsequent_indent=" " * 60)
+        return result
+
+
+def escape_ansi(line):
+    ansi_escape = re.compile(r'(\x9B|\x1B\[)[0-?]*[ -/]*[@-~]')
+    return ansi_escape.sub('', line)
+
+
+def get_terminal_size():
+    try:
+        rows, columns = os.popen('stty size', 'r').read().split()
+        return int(columns), int(rows)
+    except:
+        env = os.environ
+
+        def ioctl_GWINSZ(fd):
+            try:
+                cr = struct.unpack('hh', fcntl.ioctl(fd, termios.TIOCGWINSZ, '1234'))
+            except:
+                return
+            return cr
+
+        cr = ioctl_GWINSZ(0) or ioctl_GWINSZ(1) or ioctl_GWINSZ(2)
+        if not cr:
+            try:
+                fd = os.open(os.ctermid(), os.O_RDONLY)
+                cr = ioctl_GWINSZ(fd)
+                os.close(fd)
+            except:
+                pass
+        if not cr:
+            cr = (env.get('LINES', 25), env.get('COLUMNS', 80))
+        return int(cr[1]), int(cr[0])  # (width. height)
