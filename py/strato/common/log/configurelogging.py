@@ -103,12 +103,13 @@ def _configureOutputToScreen(logger, loggerName):
         streamHandler = logging.StreamHandler()
         atexit.register(streamHandler.close)
         if _useColorsForScreenOutput():
-            frmt = '%(startColor)s%(created).03f | %(process)d %(threadName)-12s | %(location)s | %(levelname)-8s| %(message)s%(endColor)s'
-            streamHandler.setFormatter(coloringformatter.ColoringFormatter(frmt))
+            # frmt = '%(startColor)s%(created).03f | %(process)d %(threadName)-12s | %(location)s | %(levelname)-10s| %(message)s%(endColor)s'
+            frmt = '%(startColor)s%(asctime)s | %(levelname)-10s | %(message)s%(endColor)s'
+            streamHandler.setFormatter(coloringformatter.ColoringFormatter(fmt=frmt, datefmt="%Y-%m-%d %H:%M:%S"))
             # '%(created).03f(%(process)d%(threadName)s):%(startColor)s%(levelname)s: %(message)s%(endColor)s (%(pathname)s:%(lineno)d)'))
         else:
-            frmt = '%(created).03f | %(process)d%(threadName)-12s | %(location)s | %(levelname)-8s| %(message)s'
-            streamHandler.setFormatter(coloringformatter.Formatter(frmt))
+            frmt = '%(created).03f | %(process)d%(threadName)-12s | %(location)s | %(levelname)-10s| %(message)s'
+            streamHandler.setFormatter(coloringformatter.Formatter(fmt=frmt))
             # streamHandler.setFormatter(logging.Formatter('%(created).03f(%(process)d%(threadName)s):%(levelname)s:%(message)s (%(pathname)s:%(lineno)d)'))
         handlerName = "console_%s" % loggerName if loggerName != _name else "console"
         streamHandler.set_name(handlerName)
