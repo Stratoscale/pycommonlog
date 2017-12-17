@@ -50,7 +50,7 @@ class ColoringFormatter(Formatter):
         elif record.levelno == _WARNING:
             record.startColor = config.COLORS['YELLOW']
         elif record.levelno == _STEP:
-            record.startColor = config.COLORS['LIGHT_GREEN']
+            record.startColor = config.COLORS['LIGHT_GREEN'] if "<<<" not in record.msg else config.COLORS['GREEN']
             count = self.STEP_COUNT - (0 if "<<<" not in record.msg else 1)  # for STEP context exit - no need to increment the counter
             record.levelname = "STEP [%d]" % count
             self.STEP_COUNT += 1 if "<<<" not in record.msg else 0  # for STEP context exit - no need to increment the counter
