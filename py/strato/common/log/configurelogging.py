@@ -104,8 +104,8 @@ def _configureOutputToScreen(logger, loggerName):
         atexit.register(streamHandler.close)
         if _useColorsForScreenOutput():
             # frmt = '%(startColor)s%(created).03f | %(process)d %(threadName)-12s | %(location)s | %(levelname)-10s| %(message)s%(endColor)s'
-            frmt = '%(startColor)s%(asctime)s %(levelname)-10s %(endColor)s%(message)s \t' \
-                '{}%(location)s{}'.format(config.COLORS['DARK_GRAY'], config.COLORS['REGULAR'])
+            frmt = '%(asctime)s %(startColor)s%(levelname)-10s %(endColor)s%(message)s \t\t\t' \
+                '{}%(location)s{}'.format(config.COLORS['BROWN'], config.COLORS['REGULAR'])
             streamHandler.setFormatter(coloringformatter.ColoringFormatter(fmt=frmt))
             # '%(created).03f(%(process)d%(threadName)s):%(startColor)s%(levelname)s: %(message)s%(endColor)s (%(pathname)s:%(lineno)d)'))
         else:
