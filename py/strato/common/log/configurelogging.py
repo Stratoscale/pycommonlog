@@ -147,7 +147,10 @@ def _configureLogLevels(name):
         default_overrides = overrides.get('default_log_overrides', {})
         dictConfig.update(default_overrides)
         dictConfig.update(overrides.get(name, {}))
-    logging.config.dictConfig(dictConfig)
+    try:
+        logging.config.dictConfig(dictConfig)
+    except:
+        pass
 
 def reopenLogginFiles():
     global _registered_file_handles
