@@ -1,0 +1,3 @@
+registry: rackattack-nas.dc1:5000
+build-container-image: dev-base
+build-container-tag: 6db301e2968fcb32acf1e1fa4e16803f70385380
