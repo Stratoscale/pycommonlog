@@ -57,7 +57,7 @@ class Formatter(object):
     def __init__(self, relativeTime, withThreads, showFullPaths, minimumLevel, microsecondPrecision, noColors, utc=False, sinceTime=None, untilTime="01/01/2025"):
         try:
             self.configFile = yaml.load(open(LOG_CONFIG_FILE_PATH, 'r').read())
-            if self.configFile['defaultTimezone'] != None:
+            if self.configFile['defaultTimezone'] is not None:
                 self._localTimezoneOffset = self.configFile['defaultTimezone'] * EPOCH_HOUR
             else:
                 self._localTimezoneOffset = lineparse.getTimezoneOffset()
@@ -534,9 +534,15 @@ if __name__ == "__main__":
         sys.exit(result)
 
     formatter = Formatter(
-        minimumLevel=minimumLevel(args.min_level, args.noDebug), relativeTime=args.relativeTime, noColors=args.noColors,
-        microsecondPrecision=args.microsecondPrecision, showFullPaths=args.showFullPaths,
-        withThreads=args.withThreads, utc=args.utc, sinceTime=args.since, untilTime=args.until)
+        minimumLevel=minimumLevel(args.min_level, args.noDebug),
+        relativeTime=args.relativeTime,
+        noColors=args.noColors,
+        microsecondPrecision=args.microsecondPrecision,
+        showFullPaths=args.showFullPaths,
+        withThreads=args.withThreads,
+        utc=args.utc,
+        sinceTime=args.since,
+        untilTime=args.until)
 
     def _exitOrderlyOnCtrlC(signal, frame):
         sys.exit(0)
