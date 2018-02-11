@@ -27,7 +27,7 @@ class Formatter(logging.Formatter):
         if len(record.pathname) > max_pathname_width:
             pathname = record.pathname[-max_pathname_width:]
         record.location = "...%s:%s" % (pathname, record.lineno)
-        record.location = record.location.ljust(self.LOCATION_WIDTH).strip()
+        record.location = "{:>42}".format(record.location.ljust(self.LOCATION_WIDTH).strip())
         return record.location
 
     def format(self, record):
