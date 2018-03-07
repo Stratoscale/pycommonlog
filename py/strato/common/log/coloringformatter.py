@@ -5,6 +5,7 @@ import termios
 import struct
 import logging
 import textwrap
+import inspect
 import strato.common.log.morelevels
 from strato.common.log import config
 
@@ -19,15 +20,23 @@ _STEP = logging.STEP
 
 class Formatter(logging.Formatter):
 
-    LOCATION_WIDTH = 42
+    LOCATION_WIDTH = 33
 
     def _update_location(self, record):
         max_pathname_width = self.LOCATION_WIDTH - 3 - len(str(record.lineno))
         pathname = record.pathname
-        if len(record.pathname) > max_pathname_width:
-            pathname = record.pathname[-max_pathname_width:]
-        record.location = "...%s:%s" % (pathname, record.lineno)
-        record.location = "{:>42}".format(record.location.ljust(self.LOCATION_WIDTH).strip())
+        lineno = record.lineno
+        if record.levelno == _STEP:
+            frames = inspect.getouterframes(inspect.currentframe())
+            for i, frm in enumerate(frames):
+                if 'bolt' in frm[1] and 'stepper' in frm[1]:
+                    pathname = frames[i + 1][1]
+                    lineno = frames[i + 1][2]
+                    break
+        if len(pathname) > max_pathname_width:
+            pathname = pathname[-max_pathname_width:]
+        record.location = "...%s:%s" % (pathname, lineno)
+        record.location = "{:>33}".format(record.location.ljust(self.LOCATION_WIDTH).strip())
         return record.location
 
     def format(self, record):
