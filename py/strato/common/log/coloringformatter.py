@@ -36,7 +36,7 @@ class Formatter(logging.Formatter):
         if len(pathname) > max_pathname_width:
             pathname = pathname[-max_pathname_width:]
         record.location = "...%s:%s" % (pathname, lineno)
-        record.location = "{:>33}".format(record.location.ljust(self.LOCATION_WIDTH).strip())
+        record.location = "{:>34}".format(record.location.ljust(self.LOCATION_WIDTH).strip())
         return record.location
 
     def format(self, record):
@@ -47,6 +47,10 @@ class Formatter(logging.Formatter):
 class ColoringFormatter(Formatter):
 
     STEP_COUNT = 1
+
+    def __init__(self, fmt=None, datefmt=None):
+        super(ColoringFormatter, self).__init__(fmt, datefmt)
+        self._use_textwrap = os.getenv("USE_TEXTWRAP", False)
 
     def _update_colors(self, record):
         record.endColor = config.COLORS['REGULAR']
@@ -72,7 +76,7 @@ class ColoringFormatter(Formatter):
         self._update_colors(record)
         self._update_location(record)
         result = logging.Formatter.format(self, record)
-        if len(escape_ansi(result)) > get_terminal_size()[0]:
+        if self._use_textwrap and len(escape_ansi(result)) > get_terminal_size()[0]:
             result = textwrap.fill(result, width=get_terminal_size()[0], subsequent_indent=" " * 60)
         return result
 
