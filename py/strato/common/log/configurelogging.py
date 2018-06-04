@@ -13,6 +13,7 @@ import signal
 _name = None
 _registered_file_handles = dict()
 
+
 def logFilename(name):
     return '%s/%s%s' % (config.LOGS_DIRECTORY, name, config.LOGS_SUFFIX)
 
@@ -40,6 +41,16 @@ def configureLogging(name, forceDirectory=None, registerConfigurationReloadSigna
         hostname = subprocess.check_output('/bin/hostname').strip()
     if registerConfigurationReloadSignal:
         _configureLoggingSignalHandlers()
+
+    from py.strato.tests.monitors import loggerconfig
+    log=loggerconfig.LogStashLogger(loggerName="_logs", messageType="_logs", verbose=False)
+
+    _log = log.getLogger()
+    _log.setLevel(logging.INFO)
+
+    logging.root.addHandler(_log)
+
+
     logging.info("Logging started for '%(name)s' on '%(hostname)s'", dict(
         name=name, hostname=hostname))
 
@@ -59,7 +70,6 @@ def configureLogger(loggerName):
     _configureOutputToScreen(logging.getLogger(loggerName), loggerName)
     outputFilename = "%s__%s" % (_name, loggerName)
     _configureOutputToFile(logging.getLogger(loggerName), outputFilename)
-
 
 def addFileHandler(name, path):
     fileHandler = logging.FileHandler(filename=path)
