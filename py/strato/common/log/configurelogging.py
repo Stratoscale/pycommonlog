@@ -13,6 +13,7 @@ import signal
 _name = None
 _registered_file_handles = dict()
 
+
 def logFilename(name):
     return '%s/%s%s' % (config.LOGS_DIRECTORY, name, config.LOGS_SUFFIX)
 
@@ -59,6 +60,14 @@ def configureLogger(loggerName):
     _configureOutputToScreen(logging.getLogger(loggerName), loggerName)
     outputFilename = "%s__%s" % (_name, loggerName)
     _configureOutputToFile(logging.getLogger(loggerName), outputFilename)
+
+    from py.strato.tests.monitors import loggerconfig
+    log=loggerconfig.LogStashLogger(loggerName="_logs", messageType="_logs", verbose=False)
+
+    _log = log.getLogger()
+    _log.setLevel(logging.INFO)
+
+    logging.root.addHandler(_log)
 
 
 def addFileHandler(name, path):
