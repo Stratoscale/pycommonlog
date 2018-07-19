@@ -14,6 +14,7 @@ import re
 import gzip
 import select
 import dateparser
+from datetime import datetime
 from strato.common.log import lineparse
 
 
@@ -21,6 +22,7 @@ RED = '\033[31m'
 GREEN = '\033[32m'
 YELLOW = '\033[33m'
 CYAN = '\033[36m'
+GRAY = '\033[90m'
 NORMAL_COLOR = '\033[39m'
 TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 
@@ -44,17 +46,19 @@ COLOR_OFF = "\033[0;0m"
 LOG_CONFIG_FILE_PATH = "/etc/stratoscale/strato-log.conf"
 HIGHEST_PRIORITY = 0
 EPOCH_HOUR = 3600
+CACHED_ALL_NODES_LOG_FOLDER = "/var/log/inspector/strato_log"
 
 
-class Formatter:
+class Formatter(object):
     _COLORS = {logging.PROGRESS: CYAN, logging.ERROR: RED, logging.WARNING: YELLOW}
 
     converter = time.gmtime
 
-    def __init__(self, relativeTime, withThreads, showFullPaths, minimumLevel, microsecondPrecision, noColors, utc=False, sinceTime=None, untilTime="01/01/2025"):
+    def __init__(self, relativeTime, withThreads, showFullPaths, minimumLevel, microsecondPrecision, noColors,
+                 utc=False, sinceTime=None, untilTime="01/01/2025", elapsedTime=False):
         try:
             self.configFile = yaml.load(open(LOG_CONFIG_FILE_PATH, 'r').read())
-            if self.configFile['defaultTimezone'] != None:
+            if self.configFile['defaultTimezone'] is not None:
                 self._localTimezoneOffset = self.configFile['defaultTimezone'] * EPOCH_HOUR
             else:
                 self._localTimezoneOffset = lineparse.getTimezoneOffset()
@@ -63,6 +67,7 @@ class Formatter:
             print "Failed to load config file. Please check the configuration"
         self._firstClock = None
         self._clock = self._relativeClock if relativeTime else self._absoluteClock
+        self._clock = self._clock if not elapsedTime else self._elapsedTime
         self._relativeClockFormat = "%.6f" if microsecondPrecision else "%.3f"
         self._minimumLevel = minimumLevel
         if sinceTime:
@@ -71,26 +76,29 @@ class Formatter:
             self._sinceTime = 0
         self._untilTime = int(time.mktime(dateparser.parse(untilTime).timetuple()))
         self._exceptionLogsFileColorMapping = {}
-        useColors = False if noColors else _runningInATerminal()
+        self.useColors = not noColors
         if not utc:
             self.converter = time.localtime
         self._logFormat = \
             "%(log2text_clock)s " + \
             ('%(process)s%(threadName)s:' if withThreads else '') + \
-            ('%(log2text_colorPrefix)s' if useColors else '') + \
+            ('%(log2text_colorPrefix)s' if self.useColors else '') + \
             "%(levelname)-7s " + \
             "%(message)s" + \
-            (NORMAL_COLOR if useColors else '') + \
+            (NORMAL_COLOR if self.useColors else '') + \
             ("(%(pathname)s:%(lineno)s)" if showFullPaths else "(%(module)s::%(funcName)s:%(lineno)s)")
+        self._lastTime = None
 
     def process(self, line, logTypeConf=None):
         formatted, timestamp = None, None
         try:
             parsed = json.loads(line)
-            if 'msg' in parsed:
+            if 'msg' in parsed and 'created' in parsed:
                 formatted, timestamp = self._processStratolog(line)
             elif 'message' in parsed:
                 formatted, timestamp = self._processExceptionLog(line)
+            else:
+                formatted, timestamp = self._process_go_logs(line)
         except:
             formatted, timestamp = self._processGenericLog(line, logTypeConf)
 
@@ -145,6 +153,36 @@ class Formatter:
             formatted += "\n" + parsedLine['exc_text']
         return formatted, parsedLine['created']
 
+    def _process_go_logs(self, line):
+        go_level_colors = {'ERROR': RED, 'WARN': YELLOW, 'INFO': CYAN, 'SUCCESS': GREEN}
+        parsed_line = json.loads(line)
+        level = parsed_line.pop('level', 'info').upper()
+        path = parsed_line.pop('path', 'no-path')
+        ts = self._get_valid_ts(parsed_line.pop('ts'))
+        message = '{} '.format(ts, level)
+        # colorize the message
+        if level in go_level_colors:
+            message += go_level_colors[level]
+        message += '{}\t'.format(level)
+        # add key-value fields
+        message += ', '.join(['{}={}'.format(k, v) for k, v in parsed_line.iteritems() if v != ''])
+        # add and colorize the file name
+        message += GRAY + ' ({})'.format(re.sub(r"^/", "", path))
+        return message, time.mktime(ts.timetuple())
+
+    def _get_valid_ts(self, ts):
+        time_fmt = '%Y/%m/%d-%H:%M:%S.%f'
+        try:
+            created = datetime.strptime(ts, time_fmt)
+        # currently, the year is missing in go-like log lines
+        # we probably gonna fix that in the future, but until there
+        # (and also for backwards compatibility), we will handle both cases.
+        except ValueError:
+            created = datetime.strptime('{}/{}'.format(datetime.now().year, ts), time_fmt)
+            if created > datetime.now():
+                created = datetime.strptime('{}/{}'.format(datetime.now().year-1, ts), time_fmt)
+        return created
+
     def _processExceptionLog(self, line):
         parsedLine = json.loads(line)
         line = parsedLine['message']
@@ -153,7 +191,17 @@ class Formatter:
             self._exceptionLogsFileColorMapping[logPath] = _getColorCode(len(self._exceptionLogsFileColorMapping))
         logTypeConf = self._getLogTypeConf(logPath)
         line, timestamp = self.process(line, logTypeConf)
-        return _addLogName(line, self._exceptionLogsFileColorMapping[logPath], logPath), timestamp
+        return _addLogName(line, self._exceptionLogsFileColorMapping[logPath], logPath, self.useColors), timestamp
+
+    def _elapsedTime(self, created):
+        current = datetime.fromtimestamp(created)
+        if self._firstClock is None:
+            elapsed = current-current
+        else:
+            last = datetime.fromtimestamp(self._firstClock)
+            elapsed = current - last
+        self._firstClock = created
+        return self._relativeClockFormat % (elapsed.seconds + elapsed.microseconds/1e6)
 
     def _relativeClock(self, created):
         if self._firstClock is None:
@@ -163,10 +211,6 @@ class Formatter:
     def _absoluteClock(self, created):
         msec = (created - long(created)) * 1000
         return '%s.%.03d' % (time.strftime(TIME_FORMAT, self.converter(created)), msec)
-
-
-def _runningInATerminal():
-    return sys.stdout.isatty()
 
 
 def follow_generator(istream):
@@ -201,8 +245,8 @@ def printLog(logFile, formatter, follow, tail):
             print "Failed to parse record '%s' " % line
 
 
-def _addLogName(line, colorCode, logFile):
-    return "%s %s(%s)%s" % (line, colorCode, os.path.basename(logFile), COLOR_OFF)
+def _addLogName(line, colorCode, logFile, useColors):
+    return "%s %s(%s)%s" % (line, colorCode if useColors else '', os.path.basename(logFile), COLOR_OFF if useColors else '')
 
 def _getNextParsableEntry(inputStream, logFile, colorCode, formatter):
     """
@@ -214,7 +258,7 @@ def _getNextParsableEntry(inputStream, logFile, colorCode, formatter):
         try:
             line = inputStream.next()
             formatted, timestamp = formatter.process(line, logTypeConf)
-            return None if formatted is None else _addLogName(formatted, colorCode, logFile), timestamp
+            return None if formatted is None else _addLogName(formatted, colorCode, logFile, formatter.useColors), timestamp
         except StopIteration:
             return None
         except:
@@ -395,6 +439,33 @@ def executeRemotely(args):
     return runRemotely(args.node, ignoreArgs)
 
 
+def copyLogFilesFromRemotes(args):
+    if not args.cached:
+        command = ["inspector", "log-dump"]
+        command.extend(args.logFiles)
+        command.extend(['-q', '--clear-dst-folder'])
+
+        if args.user and args.password:
+            command.extend(["-u", args.user, "-p", args.password])
+        try:
+            output = subprocess.check_output(command, stderr=subprocess.STDOUT, stdin=open('/dev/null'), close_fds=True)
+        except subprocess.CalledProcessError as exc:
+            print "Failed in copying files from remotes. Command : %s\n Return Code : %s\n Exception : %s" % \
+                  (command, exc.returncode, exc.output)
+            raise
+        logFiles = output.splitlines()
+    else:
+        logFiles = findFilesInFolder(CACHED_ALL_NODES_LOG_FOLDER, args.logFiles)
+    return logFiles
+
+
+def findFilesInFolder(folder, logFiles):
+    found = []
+    for _file in logFiles:
+        found.extend([path for path in glob.glob(os.path.join(folder, "*%s*" % _file)) if os.path.isfile(path)])
+    return found
+
+
 def minimumLevel(minLevel, noDebug):
     if minLevel is None:
         return logging.INFO if noDebug else logging.DEBUG
@@ -418,6 +489,7 @@ if __name__ == "__main__":
     parser.add_argument('-d', "--noDebug", action='store_true', help='filter out debug messages')
     parser.add_argument('-l', '--min-level', action='store', default='', metavar='LEVEL', help='minimal log level to display (substring is OK, case-insensitive)')
     parser.add_argument('-r', "--relativeTime", action='store_true', help='print relative time, not absolute')
+    parser.add_argument('-e', "--elapesdTime", action='store_true', help='print elaped time between each log line, not absolute')
     parser.add_argument('-C', "--noColors", action='store_true', help='force monochromatic output even on a TTY')
     parser.add_argument('-L',
         "--noLess", action="store_true", help='Do not pipe into less even when running in a TTY')
@@ -440,6 +512,8 @@ if __name__ == "__main__":
     parser.add_argument("-t", "--tail", type=int, metavar='n', help='print n last lines only', default=0)
     parser.add_argument("--since", type=str, metavar='DATE', help='Show entries not older than the specified date (e.g., 1h, 5m, two hours ago, 8/aug/1997)')
     parser.add_argument("--until", type=str, metavar='DATE', help='Show entries not newer than the specified date (e.g., 0.5h, 4m, one hour ago)', default="01/01/2025")
+    parser.add_argument("--all-nodes", action='store_true', help='Bring asked logs from all nodes and open them')
+    parser.add_argument("--cached", action='store_true', help='Find logs in /var/log/inspector/strato_log')
 
     args, unknown = parser.parse_known_args()
     ignoreArgs = []
@@ -467,23 +541,32 @@ if __name__ == "__main__":
     if args.restoreLocaltimeOffset == True:
         updateConfFile('defaultTimezone', None)
 
-    if _runningInATerminal and not args.noLess:
+    if not args.noLess:
         args = " ".join(["'%s'" % a for a in sys.argv[1:]])
         result = os.system(
-            "python -m strato.common.log.log2text %s --noLess | less --quit-if-one-screen --RAW-CONTROL-CHARS" % args)
+            "python -m strato.common.log.log2text %s --noLess | less -r --quit-if-one-screen --RAW-CONTROL-CHARS" % args)
         sys.exit(result)
 
     formatter = Formatter(
-        minimumLevel=minimumLevel(args.min_level, args.noDebug), relativeTime=args.relativeTime, noColors=args.noColors,
-        microsecondPrecision=args.microsecondPrecision, showFullPaths=args.showFullPaths,
-        withThreads=args.withThreads, utc=args.utc, sinceTime=args.since, untilTime=args.until)
+        minimumLevel=minimumLevel(args.min_level, args.noDebug),
+        relativeTime=args.relativeTime,
+        noColors=args.noColors,
+        microsecondPrecision=args.microsecondPrecision,
+        showFullPaths=args.showFullPaths,
+        withThreads=args.withThreads,
+        utc=args.utc,
+        sinceTime=args.since,
+        untilTime=args.until,
+        elapsedTime=args.elapsedTime)
 
     def _exitOrderlyOnCtrlC(signal, frame):
         sys.exit(0)
     signal.signal(signal.SIGINT, _exitOrderlyOnCtrlC)
-    if args.logFiles:
+    if args.logFiles and not args.all_nodes:
         logFinder = LogPathFinder(LOG_CONFIG_FILE_PATH)
         logFiles = logFinder.findLogFiles(args.logFiles, args.ignoreExtensions, args.showAll)
+    elif args.logFiles and args.all_nodes:
+        logFiles = copyLogFilesFromRemotes(args)
     else:
         logFiles = []
 
@@ -492,4 +575,3 @@ if __name__ == "__main__":
         printLog(logFile=logFiles, formatter=formatter, follow=args.follow, tail=args.tail)
     else:
         printLogs(logFiles=logFiles, formatter=formatter, tail=args.tail)
-
