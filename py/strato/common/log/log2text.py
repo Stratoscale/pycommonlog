@@ -499,7 +499,7 @@ if __name__ == "__main__":
         "--showFullPaths", action='store_true',
         help='show full path to files instead of just module and function')
     parser.add_argument("--withThreads", action="store_true", help='print process and thread name')
-    parser.add_argument("-f", "--follow", action="store_true", help='follow file forever', default=False)
+    parser.add_argument("-f", "--follow", action="store_true", help='follow file forever. Force --noLess', default=False)
     parser.add_argument("-U", "--utc", action="store_true", help='print logs in UTC time (default: localtime)', default=False)
     parser.add_argument("--setLocaltimeOffset", type=int, metavar='HOURS', help='set custom localtime offset in hours')
     parser.add_argument("-i", "--ignoreExtensions", nargs="+", metavar='EXT', help="list extensions that you don\'t want to read", default=[".gz"])
@@ -539,6 +539,9 @@ if __name__ == "__main__":
 
     if args.restoreLocaltimeOffset == True:
         updateConfFile('defaultTimezone', None)
+
+    if args.follow:
+        args.noLess = True
 
     if not args.noLess:
         args = " ".join(["'%s'" % a for a in sys.argv[1:]])
