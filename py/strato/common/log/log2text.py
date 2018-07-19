@@ -54,7 +54,8 @@ class Formatter(object):
 
     converter = time.gmtime
 
-    def __init__(self, relativeTime, withThreads, showFullPaths, minimumLevel, microsecondPrecision, noColors, utc=False, sinceTime=None, untilTime="01/01/2025"):
+    def __init__(self, relativeTime, withThreads, showFullPaths, minimumLevel, microsecondPrecision, noColors,
+                 utc=False, sinceTime=None, untilTime="01/01/2025", elapsedTime=False):
         try:
             self.configFile = yaml.load(open(LOG_CONFIG_FILE_PATH, 'r').read())
             if self.configFile['defaultTimezone'] is not None:
@@ -66,7 +67,8 @@ class Formatter(object):
             print "Failed to load config file. Please check the configuration"
         self._firstClock = None
         self._clock = self._relativeClock if relativeTime else self._absoluteClock
-        self._relativeClockFormat = "%.6f" if microsecondPrecision else "%.3f"
+        self._clock = self._clock if not elapsedTime else self._elapsedTime
+        self._relativeClockFormat = "%015.6f" if microsecondPrecision else "%012.3f"
         self._minimumLevel = minimumLevel
         if sinceTime:
             self._sinceTime = int(time.mktime(dateparser.parse(sinceTime).timetuple()))
@@ -189,6 +191,16 @@ class Formatter(object):
         logTypeConf = self._getLogTypeConf(logPath)
         line, timestamp = self.process(line, logTypeConf)
         return _addLogName(line, self._exceptionLogsFileColorMapping[logPath], logPath, self.useColors), timestamp
+
+    def _elapsedTime(self, created):
+        current = datetime.fromtimestamp(created)
+        if self._firstClock is None:
+            elapsed = current-current
+        else:
+            last = datetime.fromtimestamp(self._firstClock)
+            elapsed = current - last
+        self._firstClock = created
+        return self._relativeClockFormat % (elapsed.seconds + elapsed.microseconds/1e6)
 
     def _relativeClock(self, created):
         if self._firstClock is None:
@@ -476,6 +488,7 @@ if __name__ == "__main__":
     parser.add_argument('-d', "--noDebug", action='store_true', help='filter out debug messages')
     parser.add_argument('-l', '--min-level', action='store', default='', metavar='LEVEL', help='minimal log level to display (substring is OK, case-insensitive)')
     parser.add_argument('-r', "--relativeTime", action='store_true', help='print relative time, not absolute')
+    parser.add_argument('-e', "--elapsedTime", action='store_true', help='print elaped time between each log line, not absolute')
     parser.add_argument('-C', "--noColors", action='store_true', help='force monochromatic output even on a TTY')
     parser.add_argument('-L',
         "--noLess", action="store_true", help='Do not pipe into less even when running in a TTY')
@@ -542,7 +555,8 @@ if __name__ == "__main__":
         withThreads=args.withThreads,
         utc=args.utc,
         sinceTime=args.since,
-        untilTime=args.until)
+        untilTime=args.until,
+        elapsedTime=args.elapsedTime)
 
     def _exitOrderlyOnCtrlC(signal, frame):
         sys.exit(0)
