@@ -55,7 +55,7 @@ class Formatter(object):
     converter = time.gmtime
 
     def __init__(self, relativeTime, withThreads, showFullPaths, minimumLevel, microsecondPrecision, noColors,
-                 utc=False, sinceTime=None, untilTime="01/01/2025", elapsedTime=False):
+                 utc=False, sinceTime=None, untilTime="01/01/2025", elapsedTime=False, shouldPrintKv=False):
         try:
             self.configFile = yaml.load(open(LOG_CONFIG_FILE_PATH, 'r').read())
             if self.configFile['defaultTimezone'] is not None:
@@ -87,6 +87,8 @@ class Formatter(object):
             "%(message)s" + \
             (NORMAL_COLOR if self.useColors else '') + \
             ("(%(pathname)s:%(lineno)s)" if showFullPaths else "(%(module)s::%(funcName)s:%(lineno)s)")
+        self._shouldPrintKv = shouldPrintKv
+        self._showFullPath = showFullPaths
 
     def process(self, line, logTypeConf=None):
         formatted, timestamp = None, None
@@ -152,21 +154,53 @@ class Formatter(object):
             formatted += "\n" + parsedLine['exc_text']
         return formatted, parsedLine['created']
 
+    def _add_color(self, message, color):
+        if self.useColors:
+            return message + color
+        else:
+            return message
+
     def _process_go_logs(self, line):
-        go_level_colors = {'ERROR': RED, 'WARN': YELLOW, 'INFO': CYAN, 'SUCCESS': GREEN}
+        go_level_colors = {'FATAL': RED, 'ERROR': RED, 'WARN': YELLOW, 'WARNING': YELLOW}
+        go_levels = {'FATAL': 'FATAL', 'ERROR': 'ERROR', 'WARN': 'WARN', 'WARNING': 'WARN'}
+
         parsed_line = json.loads(line)
         level = parsed_line.pop('level', 'info').upper()
-        path = parsed_line.pop('path', 'no-path')
+
+        func_name = None
+        if 'caller' in parsed_line:
+            caller = parsed_line.pop('caller')
+            file = caller.get('File', '')
+            line = caller.get('Line','')
+            path = '{}:{}'.format(file, line)
+            func_name = caller.get('Name',None)
+        else:
+	    path = parsed_line.pop('path', 'no-path')
+        msg = parsed_line.pop('msg', None)
         ts = self._get_valid_ts(parsed_line.pop('ts'))
-        message = '{} '.format(ts, level)
+        message = '{} '.format(ts)
         # colorize the message
-        if level in go_level_colors:
-            message += go_level_colors[level]
-        message += '{}\t'.format(level)
-        # add key-value fields
-        message += ', '.join(['{}={}'.format(k, v) for k, v in parsed_line.iteritems() if v != ''])
+	if level in go_level_colors:
+	    message = self._add_color(message, go_level_colors[level])
+	    # message += go_level_colors[level]
+        message += '{}\t'.format(go_levels.get(level, level))
+        message += '{}'.format(msg)
+        messaage = self._add_color(message, NORMAL_COLOR)
+        message += NORMAL_COLOR
+        # if we have stack, print it
+        stack = parsed_line.pop('stack', None)
+        if stack is not None:
+            message += '\n'
+            for s in stack:
+                message += '\tFile {}, line {}, in {}\n'.format(s['File'], s['Line'], s['Name'])
+        if self._shouldPrintKv:
+            # add key-value fields
+            message += '\t'
+            message += ', '.join(['{}={}'.format(k, v) for k, v in parsed_line.iteritems() if v != ''])
         # add and colorize the file name
-        message += GRAY + ' ({})'.format(re.sub(r"^/", "", path))
+        message = self._add_color(message, GRAY)
+        message  += ' ({})'.format(re.sub(r"^/", "", path))
+        message = self._add_color(message, NORMAL_COLOR)
         return message, time.mktime(ts.timetuple())
 
     def _get_valid_ts(self, ts):
@@ -495,7 +529,7 @@ if __name__ == "__main__":
     parser.add_argument('-m',
         "--microsecondPrecision", action="store_true",
         help='print times in microsecond precision (instead of millisecond percision)')
-    parser.add_argument(
+    parser.add_argument("-P",
         "--showFullPaths", action='store_true',
         help='show full path to files instead of just module and function')
     parser.add_argument("--withThreads", action="store_true", help='print process and thread name')
@@ -513,6 +547,7 @@ if __name__ == "__main__":
     parser.add_argument("--until", type=str, metavar='DATE', help='Show entries not newer than the specified date (e.g., 0.5h, 4m, one hour ago)', default="01/01/2025")
     parser.add_argument("--all-nodes", action='store_true', help='Bring asked logs from all nodes and open them')
     parser.add_argument("--cached", action='store_true', help='Find logs in /var/log/inspector/strato_log')
+    parser.add_argument("-k", "--kv", action='store_true', help='print key-values in log output')
 
     args, unknown = parser.parse_known_args()
     ignoreArgs = []
@@ -559,7 +594,8 @@ if __name__ == "__main__":
         utc=args.utc,
         sinceTime=args.since,
         untilTime=args.until,
-        elapsedTime=args.elapsedTime)
+        elapsedTime=args.elapsedTime,
+        shouldPrintKv=args.kv)
 
     def _exitOrderlyOnCtrlC(signal, frame):
         sys.exit(0)
