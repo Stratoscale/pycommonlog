@@ -194,9 +194,13 @@ class Formatter(object):
             for s in stack:
                 message += '\tFile {}, line {}, in {}\n'.format(s['File'], s['Line'], s['Name'])
         if self._shouldPrintKv:
-            # add key-value fields
+            # add all key-value fields
             message += '\t'
             message += ', '.join(['{}={}'.format(k, v) for k, v in parsed_line.iteritems() if v != ''])
+        elif 'request-id' in parsed_line:
+            # add only request=id key-value, if it exists
+            message += '\trequest-id=%s' % parsed_line['request-id']
+
         # add and colorize the file name
         message = self._add_color(message, GRAY)
         message  += ' ({})'.format(re.sub(r"^/", "", path))
