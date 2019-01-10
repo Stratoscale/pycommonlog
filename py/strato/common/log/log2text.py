@@ -167,13 +167,18 @@ class Formatter(object):
         parsed_line = json.loads(line)
         level = parsed_line.pop('level', 'info').upper()
 
+        extra_data = parsed_line.pop('extra_data', {})
         func_name = None
+        caller = None
         if 'caller' in parsed_line:
             caller = parsed_line.pop('caller')
+        elif extra_data is not None:
+            caller = extra_data.pop('caller', None)
+        if caller is not None:
             file = caller.get('File', '')
             line = caller.get('Line','')
-            path = '{}:{}'.format(file, line)
             func_name = caller.get('Name',None)
+            path = '{}:{} {}'.format(file, line, func_name)
         else:
 	    path = parsed_line.pop('path', 'no-path')
         msg = parsed_line.pop('msg', None)
@@ -195,8 +200,9 @@ class Formatter(object):
                 message += '\tFile {}, line {}, in {}\n'.format(s['File'], s['Line'], s['Name'])
         if self._shouldPrintKv:
             # add key-value fields
+            extra_data.update(parsed_line)
             message += '\t'
-            message += ', '.join(['{}={}'.format(k, v) for k, v in parsed_line.iteritems() if v != ''])
+            message += ', '.join(['{}={}'.format(k, v) for k, v in extra_data.iteritems() if v != ''])
         # add and colorize the file name
         message = self._add_color(message, GRAY)
         message  += ' ({})'.format(re.sub(r"^/", "", path))
