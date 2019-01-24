@@ -84,6 +84,7 @@ class Formatter(object):
             ('%(process)s%(threadName)s:' if withThreads else '') + \
             ('%(log2text_colorPrefix)s' if self.useColors else '') + \
             "%(levelname)-7s " + \
+            "%(request_id)-32s " + \
             "%(message)s" + \
             (NORMAL_COLOR if self.useColors else '') + \
             ("(%(pathname)s:%(lineno)s)" if showFullPaths else "(%(module)s::%(funcName)s:%(lineno)s)")
@@ -148,8 +149,11 @@ class Formatter(object):
             message = parsedLine['msg'].replace('%', '%%')
         clock = self._clock(parsedLine['created'])
         colorPrefix = self._COLORS.get(parsedLine['levelno'], '')
-        formatted = self._logFormat % dict(
-            parsedLine, message=message, log2text_clock=clock, log2text_colorPrefix=colorPrefix)
+        format_args = dict(
+            message=message, log2text_clock=clock, log2text_colorPrefix=colorPrefix)
+        if 'request_id' not in parsedLine:
+            format_args['request_id'] = 'request.id.unknown'
+        formatted = self._logFormat % dict(parsedLine, **format_args)
         if parsedLine['exc_text']:
             formatted += "\n" + parsedLine['exc_text']
         return formatted, parsedLine['created']
