@@ -55,7 +55,7 @@ class Formatter(object):
     converter = time.gmtime
 
     def __init__(self, relativeTime, withThreads, showFullPaths, minimumLevel, microsecondPrecision, noColors,
-                 utc=False, sinceTime=None, untilTime="01/01/2025", elapsedTime=False, shouldPrintKv=False):
+                 utc=False, sinceTime=None, untilTime="01/01/2025", elapsedTime=False, shouldPrintKv=False, process=None):
         try:
             self.configFile = yaml.load(open(LOG_CONFIG_FILE_PATH, 'r').read())
             if self.configFile['defaultTimezone'] is not None:
@@ -90,6 +90,7 @@ class Formatter(object):
             ("(%(pathname)s:%(lineno)s)" if showFullPaths else "(%(module)s::%(funcName)s:%(lineno)s)")
         self._shouldPrintKv = shouldPrintKv
         self._showFullPath = showFullPaths
+        self._process = process
 
     def process(self, line, logTypeConf=None):
         formatted, timestamp = None, None
@@ -136,6 +137,8 @@ class Formatter(object):
     def _processStratolog(self, line):
         parsedLine = json.loads(line)
         if parsedLine['levelno'] < self._minimumLevel:
+            return None, 0
+        if self._process and parsedLine['process'] != self._process:
             return None, 0
 
         if 'args' in parsedLine and parsedLine['args']:
@@ -558,6 +561,7 @@ if __name__ == "__main__":
     parser.add_argument("--all-nodes", action='store_true', help='Bring asked logs from all nodes and open them')
     parser.add_argument("--cached", action='store_true', help='Find logs in /var/log/inspector/strato_log')
     parser.add_argument("-k", "--kv", action='store_true', help='print key-values in log output')
+    parser.add_argument("--process", type=str, help='Filter log with provided process', default=None)
 
     args, unknown = parser.parse_known_args()
     ignoreArgs = []
@@ -605,7 +609,8 @@ if __name__ == "__main__":
         sinceTime=args.since,
         untilTime=args.until,
         elapsedTime=args.elapsedTime,
-        shouldPrintKv=args.kv)
+        shouldPrintKv=args.kv,
+        process=args.process)
 
     def _exitOrderlyOnCtrlC(signal, frame):
         sys.exit(0)
