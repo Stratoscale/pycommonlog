@@ -172,6 +172,12 @@ class Formatter(object):
         level = parsed_line.pop('level', 'info').upper()
 
         extra_data = parsed_line.pop('extra_data', {})
+        if 'request-id' in extra_data:
+            request_id = extra_data.pop('request-id')
+        elif 'request_id' in extra_data:
+            request_id = extra_data.pop('request_id')
+        else:
+            request_id = 'request.id.unknown'
         func_name = None
         caller = None
         if 'caller' in parsed_line:
@@ -184,15 +190,16 @@ class Formatter(object):
             func_name = caller.get('Name',None)
             path = '{}:{} {}'.format(file, line, func_name)
         else:
-	    path = parsed_line.pop('path', 'no-path')
+            path = parsed_line.pop('path', 'no-path')
         msg = parsed_line.pop('msg', None)
         ts = self._get_valid_ts(parsed_line.pop('ts'))
         message = '{} '.format(ts)
         # colorize the message
-	if level in go_level_colors:
-	    message = self._add_color(message, go_level_colors[level])
-	    # message += go_level_colors[level]
+        if level in go_level_colors:
+            message = self._add_color(message, go_level_colors[level])
+            # message += go_level_colors[level]
         message += '{}\t'.format(go_levels.get(level, level))
+        message += "%-32s " % request_id
         message += '{}'.format(msg)
         messaage = self._add_color(message, NORMAL_COLOR)
         message += NORMAL_COLOR
