@@ -167,6 +167,15 @@ class Formatter(object):
         else:
             return message
 
+    # In some go services the fields are grouped under extra_data dict, and in some they are not grouped
+    def _extract_go_fields(self, parsed_line, extra_data, field_name):
+        if field_name in extra_data:
+            return extra_data.pop(field_name)
+        elif field_name in parsed_line:
+            return parsed_line.pop(field_name)
+        else:
+            return None
+
     def _process_go_logs(self, line):
         go_level_colors = {'FATAL': RED, 'ERROR': RED, 'WARN': YELLOW, 'WARNING': YELLOW}
         go_levels = {'FATAL': 'FATAL', 'ERROR': 'ERROR', 'WARN': 'WARN', 'WARNING': 'WARN'}
@@ -181,12 +190,10 @@ class Formatter(object):
             request_id = extra_data.pop('request_id')
         else:
             request_id = 'request.id.unknown'
+        error = self._extract_go_fields(parsed_line, extra_data, 'error')
+        stack = self._extract_go_fields(parsed_line, extra_data, 'stack')
         func_name = None
-        caller = None
-        if 'caller' in parsed_line:
-            caller = parsed_line.pop('caller')
-        elif extra_data is not None:
-            caller = extra_data.pop('caller', None)
+        caller = self._extract_go_fields(parsed_line, extra_data, 'caller')
         if caller is not None:
             file = caller.get('File', '')
             line = caller.get('Line','')
@@ -206,12 +213,15 @@ class Formatter(object):
         message += '{}'.format(msg)
         messaage = self._add_color(message, NORMAL_COLOR)
         message += NORMAL_COLOR
-        # if we have stack, print it
-        stack = parsed_line.pop('stack', None)
         if stack is not None:
             message += '\n'
             for s in stack:
                 message += '\tFile {}, line {}, in {}\n'.format(s['File'], s['Line'], s['Name'])
+        if error is not None:
+            error_lines = error.split('\n')
+            message += '\tError: {}\n'.format(error_lines[0])
+            for l in error_lines[1:]:
+                message += '\t{}\n'.format(l)
         if self._shouldPrintKv:
             # add key-value fields
             extra_data.update(parsed_line)
