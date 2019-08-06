@@ -191,6 +191,9 @@ class Formatter(object):
         else:
             request_id = 'request.id.unknown'
         error = self._extract_go_fields(parsed_line, extra_data, 'error')
+        # Prevent strato-log printing empty error logs
+        if error == "":
+            error = None
         stack = self._extract_go_fields(parsed_line, extra_data, 'stack')
         func_name = None
         caller = self._extract_go_fields(parsed_line, extra_data, 'caller')
