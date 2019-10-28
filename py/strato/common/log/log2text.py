@@ -234,16 +234,20 @@ class Formatter(object):
         return message, time.mktime(ts.timetuple())
 
     def _get_valid_ts(self, ts):
-        time_fmt = '%Y/%m/%d-%H:%M:%S.%f'
-        try:
-            created = datetime.strptime(ts, time_fmt)
-        # currently, the year is missing in go-like log lines
-        # we probably gonna fix that in the future, but until there
-        # (and also for backwards compatibility), we will handle both cases.
-        except ValueError:
-            created = datetime.strptime('{}/{}'.format(datetime.now().year, ts), time_fmt)
-            if created > datetime.now():
-                created = datetime.strptime('{}/{}'.format(datetime.now().year-1, ts), time_fmt)
+        if not isinstance(ts, float):
+            time_fmt = '%Y/%m/%d-%H:%M:%S.%f'
+            try:
+                created = datetime.strptime(ts, time_fmt)
+            # currently, the year is missing in go-like log lines
+            # we probably gonna fix that in the future, but until there
+            # (and also for backwards compatibility), we will handle both cases.
+            except ValueError:
+                created = datetime.strptime('{}/{}'.format(datetime.now().year, ts), time_fmt)
+                if created > datetime.now():
+                    created = datetime.strptime('{}/{}'.format(datetime.now().year-1, ts), time_fmt)
+        # Newer golang services report time as timestamp
+        else:
+            created = datetime.fromtimestamp(float(ts))
         return created
 
     def _processExceptionLog(self, line):
