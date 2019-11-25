@@ -455,10 +455,10 @@ class LogPathFinder:
          logsToRead.extend(self._tryToMatchShortcut(filePath, extensionsToIgnore)) for filePath in providedPaths]
         return logsToRead
 
-    def filterIgnoredExtensions(self, listPaths, ignoredExtensions):
+    def filterIgnoredExtensions(self, listPaths, ignoredExtensions, filePath):
         for path in list(listPaths):
             for ignoredExtension in ignoredExtensions:
-                if path.endswith(ignoredExtension):
+                if path.endswith(ignoredExtension) and not(filePath.endswith(ignoredExtension)):
                     listPaths.remove(path)
 
     def _tryToMatchShortcut(self, filePath, extensionsToIgnore):
@@ -467,7 +467,7 @@ class LogPathFinder:
                 return self.matchBundle(filePath)
             else:
                 matches = self.tryToMatchDefaultPath(filePath)
-                self.filterIgnoredExtensions(matches, extensionsToIgnore)
+                self.filterIgnoredExtensions(matches, extensionsToIgnore, filePath)
                 return matches
         except:
             raise Exception("No matching files were found for %s" % filePath)
