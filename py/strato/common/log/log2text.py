@@ -64,7 +64,7 @@ class Formatter(object):
                 self._localTimezoneOffset = lineparse.getTimezoneOffset()
         except:
             self._localTimezoneOffset = lineparse.getTimezoneOffset()
-            print "Failed to load config file. Please check the configuration"
+            print("Failed to load config file. Please check the configuration")
         self._firstClock = None
         self._clock = self._relativeClock if relativeTime else self._absoluteClock
         self._clock = self._clock if not elapsedTime else self._elapsedTime
@@ -95,6 +95,7 @@ class Formatter(object):
     def process(self, line, logTypeConf=None):
         formatted, timestamp = None, None
         try:
+            import pdb; pdb.set_trace()
             parsed = json.loads(line)
             if 'msg' in parsed and 'created' in parsed:
                 formatted, timestamp = self._processStratolog(line)
@@ -304,12 +305,12 @@ def printLog(logFile, formatter, follow, tail):
             formatted, timestamp = formatter.process(line, logTypeConf)
             if formatted is None:
                 continue
-            print formatted
+            print(formatted)
         except IOError:
             inputStream.close()
             break
         except:
-            print "Failed to parse record '%s' " % line
+            print("Failed to parse record '%s' " % line)
 
 
 def _addLogName(line, colorCode, logFile, useColors):
@@ -347,7 +348,7 @@ def printLogs(logFiles, formatter, tail):
         if formatted is not None:
             # prevent printing the Broken Pipe error when 'less' is quit
             try:
-                print formatted
+                print(formatted)
             except IOError as e:
                 break
 
@@ -361,7 +362,7 @@ def updateConfFile(field, value):
         with open(LOG_CONFIG_FILE_PATH, 'r') as f:
             conf = yaml.load(f.read())
     except:
-        print "No configuration file was found. creating new"
+        print("No configuration file was found. creating new")
         conf = {}
     finally:
         conf[field] = value
@@ -395,7 +396,7 @@ def checkSshConnectivity(host):
         return True
     except Exception as e:
         if e.message == "timed out":
-            print "Connection has timed out on host %s" % host
+            print("Connection has timed out on host %s" % host)
             s.close()
         return False
 
@@ -404,7 +405,7 @@ def runRemotely(host, ignoreArgs):
         configFile = yaml.load(open(LOG_CONFIG_FILE_PATH, 'r').read())
     except:
         configFile = {}
-        print "Configuration file was not found"
+        print("Configuration file was not found")
 
     args = ['\\"%s\\"' % arg for arg in sys.argv[1:] if arg not in ignoreArgs]
     command = "strato-log %s" % ' '.join(args)
@@ -415,7 +416,7 @@ def runRemotely(host, ignoreArgs):
     possibleResolveSuffixes = configFile.get("possibleResolveSuffixes", [])
     hostname = findHostname(host, possibleResolveSuffixes)
     if hostname == None:
-        print "No reachable host was found for %s" % host
+        print("No reachable host was found for %s" % host)
         return 1
 
     host = "%(user)s@%(hostname)s" % dict(user=user,
@@ -517,8 +518,8 @@ def copyLogFilesFromRemotes(args):
         try:
             output = subprocess.check_output(command, stderr=subprocess.STDOUT, stdin=open('/dev/null'), close_fds=True)
         except subprocess.CalledProcessError as exc:
-            print "Failed in copying files from remotes. Command : %s\n Return Code : %s\n Exception : %s" % \
-                  (command, exc.returncode, exc.output)
+            print("Failed in copying files from remotes. Command : %s\n Return Code : %s\n Exception : %s" % \
+                  (command, exc.returncode, exc.output))
             raise
         logFiles = output.splitlines()
     else:
@@ -543,7 +544,7 @@ def minimumLevel(minLevel, noDebug):
                   'progress': logging.PROGRESS,
                   'success': logging.SUCCESS,
                   'step': logging.STEP}
-    for string, level in level_dict.iteritems():
+    for string, level in level_dict.items():
         if string.startswith(minLevel.lower()):
             return level
     return logging.DEBUG
@@ -593,7 +594,7 @@ if __name__ == "__main__":
         stdin = False
 
     if len(sys.argv) <= 1 and not stdin:
-        print 'No input was provided'
+        print('No input was provided')
         exit(1)
 
     if args.node != None:
@@ -601,7 +602,7 @@ if __name__ == "__main__":
 
     elif unknown:
         for arg in unknown:
-            print "Not a valid argument \"%s\"" % arg
+            print("Not a valid argument \"%s\"" % arg)
         exit(1)
 
     if args.setLocaltimeOffset != None:
