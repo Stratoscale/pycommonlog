@@ -1,5 +1,5 @@
 import os
-from strato.common.log import environment
+from common_log import environment
 import signal
 
 LOGS_DIRECTORY = os.environ.get('STRATO_LOGS_DIRECTORY', None)

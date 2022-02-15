@@ -7,7 +7,7 @@ import signal
 import logging
 import yaml
 import glob
-import strato.common.log.morelevels
+import common_log.morelevels
 import socket
 import subprocess
 import re
@@ -15,7 +15,7 @@ import gzip
 import select
 import dateparser
 from datetime import datetime
-from strato.common.log import lineparse
+from common_log import lineparse
 
 
 RED = '\033[31m'
@@ -43,10 +43,10 @@ MULTY_LOG_COLORS = (
     "\033[2;36m",
 )
 COLOR_OFF = "\033[0;0m"
-LOG_CONFIG_FILE_PATH = "/etc/stratoscale/strato-log.conf"
+LOG_CONFIG_FILE_PATH = "/etc/stratoscale/strato-common_log.conf"
 HIGHEST_PRIORITY = 0
 EPOCH_HOUR = 3600
-CACHED_ALL_NODES_LOG_FOLDER = "/var/log/inspector/strato_log"
+CACHED_ALL_NODES_LOG_FOLDER = "/var/common_log/inspector/strato_log"
 
 
 class Formatter(object):
@@ -238,7 +238,7 @@ class Formatter(object):
             time_fmt = '%Y/%m/%d-%H:%M:%S.%f'
             try:
                 created = datetime.strptime(ts, time_fmt)
-            # currently, the year is missing in go-like log lines
+            # currently, the year is missing in go-like common_log lines
             # we probably gonna fix that in the future, but until there
             # (and also for backwards compatibility), we will handle both cases.
             except ValueError:
@@ -407,7 +407,7 @@ def runRemotely(host, ignoreArgs):
         print "Configuration file was not found"
 
     args = ['\\"%s\\"' % arg for arg in sys.argv[1:] if arg not in ignoreArgs]
-    command = "strato-log %s" % ' '.join(args)
+    command = "strato-common_log %s" % ' '.join(args)
 
     user = configFile.get("defaultRemoteUser", 'root')
     password = configFile.get("defaultRemotePassword", 'password')
@@ -508,7 +508,7 @@ def executeRemotely(args):
 
 def copyLogFilesFromRemotes(args):
     if not args.cached:
-        command = ["inspector", "log-dump"]
+        command = ["inspector", "common_log-dump"]
         command.extend(args.logFiles)
         command.extend(['-q', '--clear-dst-folder'])
 
@@ -554,9 +554,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("logFiles", metavar='logFile', nargs='*', help='logfiles to read')
     parser.add_argument('-d', "--noDebug", action='store_true', help='filter out debug messages')
-    parser.add_argument('-l', '--min-level', action='store', default='', metavar='LEVEL', help='minimal log level to display (substring is OK, case-insensitive)')
+    parser.add_argument('-l', '--min-level', action='store', default='', metavar='LEVEL', help='minimal common_log level to display (substring is OK, case-insensitive)')
     parser.add_argument('-r', "--relativeTime", action='store_true', help='print relative time, not absolute')
-    parser.add_argument('-e', "--elapsedTime", action='store_true', help='print elaped time between each log line, not absolute')
+    parser.add_argument('-e', "--elapsedTime", action='store_true', help='print elaped time between each common_log line, not absolute')
     parser.add_argument('-C', "--noColors", action='store_true', help='force monochromatic output even on a TTY')
     parser.add_argument('-L',
         "--noLess", action="store_true", help='Do not pipe into less even when running in a TTY')
@@ -572,7 +572,7 @@ if __name__ == "__main__":
     parser.add_argument("--setLocaltimeOffset", type=int, metavar='HOURS', help='set custom localtime offset in hours')
     parser.add_argument("-i", "--ignoreExtensions", nargs="+", metavar='EXT', help="list extensions that you don\'t want to read", default=[".gz"])
     parser.add_argument("-a", "--showAll", action="store_true", help='show all logs', default=False)
-    parser.add_argument("-n", "--node", type=str, help='run strato-log on remote node (possible input is host name or service with DNS resolve', default=None)
+    parser.add_argument("-n", "--node", type=str, help='run strato-common_log on remote node (possible input is host name or service with DNS resolve', default=None)
     parser.add_argument("-p", "--password", type=str, help='set default remote password to connect with', default=None)
     parser.add_argument("-u", "--user", type=str, help='set default remote user to connect with', default=None)
     parser.add_argument("--restoreLocaltimeOffset", action="store_true", help='restore localtime offset to machine\'s offset')
@@ -580,9 +580,9 @@ if __name__ == "__main__":
     parser.add_argument("--since", type=str, metavar='DATE', help='Show entries not older than the specified date (e.g., 1h, 5m, two hours ago, 8/aug/1997)')
     parser.add_argument("--until", type=str, metavar='DATE', help='Show entries not newer than the specified date (e.g., 0.5h, 4m, one hour ago)', default="01/01/2025")
     parser.add_argument("--all-nodes", action='store_true', help='Bring asked logs from all nodes and open them')
-    parser.add_argument("--cached", action='store_true', help='Find logs in /var/log/inspector/strato_log')
-    parser.add_argument("-k", "--kv", action='store_true', help='print key-values in log output')
-    parser.add_argument("--process", type=str, help='Filter log with provided process', default=None)
+    parser.add_argument("--cached", action='store_true', help='Find logs in /var/common_log/inspector/strato_log')
+    parser.add_argument("-k", "--kv", action='store_true', help='print key-values in common_log output')
+    parser.add_argument("--process", type=str, help='Filter common_log with provided process', default=None)
 
     args, unknown = parser.parse_known_args()
     ignoreArgs = []
@@ -616,7 +616,7 @@ if __name__ == "__main__":
     if not args.noLess:
         args = " ".join(["'%s'" % a for a in sys.argv[1:]])
         result = os.system(
-            "python -m strato.common.log.log2text %s --noLess | less -r --quit-if-one-screen --RAW-CONTROL-CHARS" % args)
+            "python -m strato.common.common_log.log2text %s --noLess | less -r --quit-if-one-screen --RAW-CONTROL-CHARS" % args)
         sys.exit(result)
 
     formatter = Formatter(

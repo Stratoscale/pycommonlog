@@ -10,7 +10,7 @@ function txtFile( fileName )
 
 function logFile( fileName )
 {
-    return stringEndsWith( fileName, ".log" ) || stringEndsWith( fileName, ".stratolog" );
+    return stringEndsWith( fileName, ".common_log" ) || stringEndsWith( fileName, ".stratolog" );
 }
 
 function File( basename, rootDir )

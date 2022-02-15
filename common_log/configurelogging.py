@@ -1,6 +1,6 @@
-from strato.common.log import config
-from strato.common.log import machinereadableformatter
-from strato.common.log import coloringformatter
+from common_log import config
+from common_log import machinereadableformatter
+from common_log import coloringformatter
 import logging
 import logging.config
 import os
@@ -73,7 +73,7 @@ def addFileHandler(name, path):
 
 
 def changeHandlerLogLevelbyHandlerType(logger, logLevel, handlerType=None):
-    """ if not specifying handlers type (leaving it None) , log level will be changed to all handlers """
+    """ if not specifying handlers type (leaving it None) , common_log level will be changed to all handlers """
     [handler.setLevel(logLevel) for handler in logger.handlers if not handlerType or type(handler) == handlerType]
 
 
@@ -82,7 +82,7 @@ def _findCaller():
     while hasattr(f, "f_code"):
         co = f.f_code
         filename = os.path.normcase(co.co_filename)
-        if 'logging/__init__.py' in filename or 'common/log/morelevels.py' in filename:
+        if 'logging/__init__.py' in filename or 'common/common_log/morelevels.py' in filename:
             f = f.f_back
             continue
         return (filename, f.f_lineno, co.co_name)

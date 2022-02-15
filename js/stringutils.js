@@ -47,7 +47,7 @@ function pythonFormatString( format, args )
             msgParts[ partsIndex ] +=  args[ partsIndex ];
         message = msgParts.join( '' );
 	    if ( countOfSpotsToAddArgs != args.length )
-		    message += "-------- Reporter Warning! count of args in log message doesnt match the count of spaces to add in the message"
+		    message += "-------- Reporter Warning! count of args in common_log message doesnt match the count of spaces to add in the message"
     }
     else {
         message = new String( format );

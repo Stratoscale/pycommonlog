@@ -12,7 +12,7 @@ class Test(unittest.TestCase):
 
     def test_useCaseFromCommandLine(self):
         PROGRAM = "\n".join([
-            """from strato.common.log import configurelogging""",
+            """from strato.common.common_log import configurelogging""",
             """configurelogging.configureLogging('fakeuser')""",
             """import logging""",
             """logging.info("dict %%(here)s", dict(here='there'))""",
@@ -26,7 +26,7 @@ class Test(unittest.TestCase):
 
     def test_useCaseWithSublogger(self):
         PROGRAM = "\n".join([
-            """from strato.common.log import configurelogging""",
+            """from strato.common.common_log import configurelogging""",
             """configurelogging.configureLogging('mainlog')""",
             """configurelogging.configureLogger('sub.logger')""",
             """import logging""",
@@ -50,9 +50,9 @@ class Test(unittest.TestCase):
 
     def test_useCaseForDaemon(self):
         PROGRAM = "\n".join([
-            """import strato.common.log.environment""",
-            """strato.common.log.environment.guessIfRunningAsAService = lambda: True""",
-            """from strato.common.log import configurelogging""",
+            """import strato.common.common_log.environment""",
+            """strato.common.common_log.environment.guessIfRunningAsAService = lambda: True""",
+            """from strato.common.common_log import configurelogging""",
             """configurelogging.configureLogging('mainlog')""",
             """configurelogging.configureLogger('sub.logger')""",
             """import logging""",
@@ -89,13 +89,13 @@ class Test(unittest.TestCase):
 
     def test_useCaseForConfigurationChange(self):
         PROGRAM = "\n".join([
-            """import strato.common.log.config""",
-            """strato.common.log.config.LOGS_CONFIGURATION_OVERRIDE_FILE = '/tmp/test_logging'""",
+            """import strato.common.common_log.config""",
+            """strato.common.common_log.config.LOGS_CONFIGURATION_OVERRIDE_FILE = '/tmp/test_logging'""",
             """import json""",
             """firstConfig = {'default_log_overrides': {'handlers': {'console': {'level': 'WARNING'}, 'file': {'level': 'INFO'}}}}""",
-            """with open(strato.common.log.config.LOGS_CONFIGURATION_OVERRIDE_FILE, 'wt') as fd:""",
+            """with open(strato.common.common_log.config.LOGS_CONFIGURATION_OVERRIDE_FILE, 'wt') as fd:""",
             """    json.dump(firstConfig, fd)""",
-            """from strato.common.log import configurelogging""",
+            """from strato.common.common_log import configurelogging""",
             """configurelogging.configureLogging('mainlog')""",
             """configurelogging.configureLogger('sub.logger')""",
             """import logging""",
@@ -105,11 +105,11 @@ class Test(unittest.TestCase):
             """logging.getLogger('sub.logger').error('sub error message')""",
             """secondConfig = {'mainlog': {'loggers': {'sub.logger': {'level': 'WARNING', 'propagate' : False}},"""\
             """'handlers': {'console': {'level': 'INFO'}, 'file': {'level': 'INFO'}}, 'root': {'level': 'INFO'}, 'incremental' : True}}""",
-            """with open(strato.common.log.config.LOGS_CONFIGURATION_OVERRIDE_FILE, 'wt') as fd:""",
+            """with open(strato.common.common_log.config.LOGS_CONFIGURATION_OVERRIDE_FILE, 'wt') as fd:""",
             """    json.dump(secondConfig, fd)""",
             """import os""",
             """import signal""",
-            """os.kill(os.getpid(), strato.common.log.config.UPDATE_LOGGING_CONFIGURATION_SIGNAL)""",
+            """os.kill(os.getpid(), strato.common.common_log.config.UPDATE_LOGGING_CONFIGURATION_SIGNAL)""",
             """logging.getLogger().info('message after config change')""",
             """logging.error('root error after config change')""",
             """logging.getLogger('sub.logger').info('sub after config change')""",
