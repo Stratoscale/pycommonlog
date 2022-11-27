@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+from past.builtins import long
 import json
 import os
 import sys
@@ -14,6 +15,7 @@ import re
 import gzip
 import select
 import dateparser
+from future.utils import iteritems
 from datetime import datetime
 from strato.common.log import lineparse
 
@@ -64,7 +66,7 @@ class Formatter(object):
                 self._localTimezoneOffset = lineparse.getTimezoneOffset()
         except:
             self._localTimezoneOffset = lineparse.getTimezoneOffset()
-            print "Failed to load config file. Please check the configuration"
+            print("Failed to load config file. Please check the configuration")
         self._firstClock = None
         self._clock = self._relativeClock if relativeTime else self._absoluteClock
         self._clock = self._clock if not elapsedTime else self._elapsedTime
@@ -97,11 +99,11 @@ class Formatter(object):
         try:
             parsed = json.loads(line)
             if 'msg' in parsed and 'created' in parsed:
-                formatted, timestamp = self._processStratolog(line)
+                formatted, timestamp = self._processStratolog(parsed)
             elif 'message' in parsed:
-                formatted, timestamp = self._processExceptionLog(line)
+                formatted, timestamp = self._processExceptionLog(parsed)
             else:
-                formatted, timestamp = self._process_go_logs(line)
+                formatted, timestamp = self._process_go_logs(line, parsed)
         except:
             formatted, timestamp = self._processGenericLog(line, logTypeConf)
 
@@ -134,8 +136,7 @@ class Formatter(object):
             # in case the line wasn't able to get parsed for some reason, print it as when you encounter it
             return line.strip('\n'), HIGHEST_PRIORITY
 
-    def _processStratolog(self, line):
-        parsedLine = json.loads(line)
+    def _processStratolog(self, parsedLine):
         if parsedLine['levelno'] < self._minimumLevel:
             return None, 0
         if self._process and parsedLine['process'] != self._process:
@@ -176,11 +177,10 @@ class Formatter(object):
         else:
             return None
 
-    def _process_go_logs(self, line):
+    def _process_go_logs(self, parsed_line):
         go_level_colors = {'FATAL': RED, 'ERROR': RED, 'WARN': YELLOW, 'WARNING': YELLOW}
         go_levels = {'FATAL': 'FATAL', 'ERROR': 'ERROR', 'WARN': 'WARN', 'WARNING': 'WARN'}
 
-        parsed_line = json.loads(line)
         level = parsed_line.pop('level', 'info').upper()
 
         extra_data = parsed_line.pop('extra_data', {})
@@ -226,7 +226,7 @@ class Formatter(object):
             # add key-value fields
             extra_data.update(parsed_line)
             message += '\t'
-            message += ', '.join(['{}={}'.format(k, v) for k, v in extra_data.iteritems() if v != ''])
+            message += ', '.join(['{}={}'.format(k, v) for k, v in iteritems(extra_data) if v != ''])
         # add and colorize the file name
         message = self._add_color(message, GRAY)
         message  += ' ({})'.format(re.sub(r"^/", "", path))
@@ -250,8 +250,7 @@ class Formatter(object):
             created = datetime.fromtimestamp(float(ts))
         return created
 
-    def _processExceptionLog(self, line):
-        parsedLine = json.loads(line)
+    def _processExceptionLog(self, parsedLine):
         line = parsedLine['message']
         logPath = parsedLine['source']
         if logPath not in self._exceptionLogsFileColorMapping:
@@ -291,7 +290,7 @@ def follow_generator(istream):
 
 def printLog(logFile, formatter, follow, tail):
     if logFile:
-        inputStream = universalOpen(logFile[0], 'r', tail=tail)
+        inputStream = universalOpen(logFile[0], 'r', tail=tail, follow=follow)
         logTypeConf = formatter._getLogTypeConf(logFile[0])
     else:
         inputStream = sys.stdin
@@ -304,12 +303,12 @@ def printLog(logFile, formatter, follow, tail):
             formatted, timestamp = formatter.process(line, logTypeConf)
             if formatted is None:
                 continue
-            print formatted
+            print(formatted)
         except IOError:
             inputStream.close()
             break
         except:
-            print "Failed to parse record '%s' " % line
+            print("Failed to parse record '%s' " % line)
 
 
 def _addLogName(line, colorCode, logFile, useColors):
@@ -347,7 +346,7 @@ def printLogs(logFiles, formatter, tail):
         if formatted is not None:
             # prevent printing the Broken Pipe error when 'less' is quit
             try:
-                print formatted
+                print(formatted)
             except IOError as e:
                 break
 
@@ -361,7 +360,7 @@ def updateConfFile(field, value):
         with open(LOG_CONFIG_FILE_PATH, 'r') as f:
             conf = yaml.load(f.read())
     except:
-        print "No configuration file was found. creating new"
+        print("No configuration file was found. creating new")
         conf = {}
     finally:
         conf[field] = value
@@ -371,19 +370,25 @@ def updateConfFile(field, value):
     os.system('sudo mv /tmp/stratolog-conf.tmp %s' % LOG_CONFIG_FILE_PATH)
 
 
-def universalOpen(filePath, mode='r', tail=0):
+def universalOpen(filePath, mode='r', tail=0, follow=False):
     if filePath.endswith('.gz'):
         fileObj = gzip.GzipFile(filePath, mode)
     else:
-        if tail > 0:
-            fileObj = tailFile(filePath, tail)
+        if tail > 0 or follow:
+            fileObj = tailFile(filePath, tail, follow)
         else:
             fileObj = open(filePath, mode)
     return fileObj
 
-def tailFile(filePath, n):
-    p = subprocess.Popen(["tail", "-n", str(n), filePath], stdout=subprocess.PIPE)
+
+def tailFile(filePath, n, follow=False):
+    if follow:
+        cmd = ["tail", "-f", "-n", str(n), filePath]
+    else:
+        cmd = ["tail", "-n", str(n), filePath]
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE)
     return p.stdout
+
 
 def checkSshConnectivity(host):
     try:
@@ -395,16 +400,17 @@ def checkSshConnectivity(host):
         return True
     except Exception as e:
         if e.message == "timed out":
-            print "Connection has timed out on host %s" % host
+            print("Connection has timed out on host %s" % host)
             s.close()
         return False
+
 
 def runRemotely(host, ignoreArgs):
     try:
         configFile = yaml.load(open(LOG_CONFIG_FILE_PATH, 'r').read())
     except:
         configFile = {}
-        print "Configuration file was not found"
+        print("Configuration file was not found")
 
     args = ['\\"%s\\"' % arg for arg in sys.argv[1:] if arg not in ignoreArgs]
     command = "strato-log %s" % ' '.join(args)
@@ -415,7 +421,7 @@ def runRemotely(host, ignoreArgs):
     possibleResolveSuffixes = configFile.get("possibleResolveSuffixes", [])
     hostname = findHostname(host, possibleResolveSuffixes)
     if hostname == None:
-        print "No reachable host was found for %s" % host
+        print("No reachable host was found for %s" % host)
         return 1
 
     host = "%(user)s@%(hostname)s" % dict(user=user,
@@ -428,6 +434,7 @@ def runRemotely(host, ignoreArgs):
                                 host=host,
                                 password=password))
     return 0
+
 
 def findHostname(host, possibleResolveSuffixes):
     if checkSshConnectivity(host):
@@ -517,8 +524,8 @@ def copyLogFilesFromRemotes(args):
         try:
             output = subprocess.check_output(command, stderr=subprocess.STDOUT, stdin=open('/dev/null'), close_fds=True)
         except subprocess.CalledProcessError as exc:
-            print "Failed in copying files from remotes. Command : %s\n Return Code : %s\n Exception : %s" % \
-                  (command, exc.returncode, exc.output)
+            print("Failed in copying files from remotes. Command : %s\n Return Code : %s\n Exception : %s" % \
+                  (command, exc.returncode, exc.output))
             raise
         logFiles = output.splitlines()
     else:
@@ -543,7 +550,7 @@ def minimumLevel(minLevel, noDebug):
                   'progress': logging.PROGRESS,
                   'success': logging.SUCCESS,
                   'step': logging.STEP}
-    for string, level in level_dict.iteritems():
+    for string, level in iteritems(level_dict):
         if string.startswith(minLevel.lower()):
             return level
     return logging.DEBUG
@@ -593,7 +600,7 @@ if __name__ == "__main__":
         stdin = False
 
     if len(sys.argv) <= 1 and not stdin:
-        print 'No input was provided'
+        print('No input was provided')
         exit(1)
 
     if args.node != None:
@@ -601,7 +608,7 @@ if __name__ == "__main__":
 
     elif unknown:
         for arg in unknown:
-            print "Not a valid argument \"%s\"" % arg
+            print("Not a valid argument \"%s\"" % arg)
         exit(1)
 
     if args.setLocaltimeOffset != None:
@@ -618,6 +625,10 @@ if __name__ == "__main__":
         result = os.system(
             "python -m strato.common.log.log2text %s --noLess | less -r --quit-if-one-screen --RAW-CONTROL-CHARS" % args)
         sys.exit(result)
+
+    # If in follow mode, print at least 10 lines
+    if args.follow and args.tail == 0:
+        args.tail = 10
 
     formatter = Formatter(
         minimumLevel=minimumLevel(args.min_level, args.noDebug),
@@ -645,7 +656,7 @@ if __name__ == "__main__":
         logFiles = []
 
     if stdin or len(logFiles) == 1:
-    # use this function in case there is a single file read or there is something in stdin (single stream)
+        # use this function in case there is a single file read or there is something in stdin (single stream)
         printLog(logFile=logFiles, formatter=formatter, follow=args.follow, tail=args.tail)
     else:
         printLogs(logFiles=logFiles, formatter=formatter, tail=args.tail)
