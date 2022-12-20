@@ -103,7 +103,7 @@ class Formatter(object):
             elif 'message' in parsed:
                 formatted, timestamp = self._processExceptionLog(parsed)
             else:
-                formatted, timestamp = self._process_go_logs(line, parsed)
+                formatted, timestamp = self._process_go_logs(parsed)
         except:
             formatted, timestamp = self._processGenericLog(line, logTypeConf)
 
