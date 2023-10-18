@@ -40,6 +40,13 @@ def configureLogging(name, forceDirectory=None, registerConfigurationReloadSigna
         hostname = subprocess.check_output('/bin/hostname').strip()
     if registerConfigurationReloadSignal:
         _configureLoggingSignalHandlers()
+    if os.environ.get("MONKEY_ELASTIFY"):
+        logging.info('Passing monkey logs to elk')
+        from py.strato.tests.monitors.loggerconfig import LogStashLogger
+        log = LogStashLogger(loggerName="monkey-logs", messageType="monkey-logs", verbose=False)
+        _log = log.getLogger()
+        _log.setLevel(logging.INFO)
+        logging .root.addHandler(_log)
     logging.info("Logging started for '%(name)s' on '%(hostname)s'", dict(
         name=name, hostname=hostname))
 
@@ -59,7 +66,6 @@ def configureLogger(loggerName):
     _configureOutputToScreen(logging.getLogger(loggerName), loggerName)
     outputFilename = "%s__%s" % (_name, loggerName)
     _configureOutputToFile(logging.getLogger(loggerName), outputFilename)
-
 
 def addFileHandler(name, path):
     fileHandler = logging.FileHandler(filename=path)
