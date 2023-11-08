@@ -1,0 +1,4 @@
+build
+pep8
+ipdb
+twine
