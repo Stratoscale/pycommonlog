@@ -1,0 +1,4 @@
+python-setuptools-plugins==0.0.2+g865898c
+pyyaml
+regex<2022; python_version < "3"
+dateparser
