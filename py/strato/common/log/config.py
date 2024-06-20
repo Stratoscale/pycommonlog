@@ -39,4 +39,4 @@ DEFAULT_LOG_CONFIGURATION = {
     "incremental": True
 }
 
-exec os.environ.get("STRATO_CONFIG_LOGGING", "")
+exec(os.environ.get("STRATO_CONFIG_LOGGING", ""))

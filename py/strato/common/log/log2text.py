@@ -1,23 +1,25 @@
 #!/usr/bin/env python
-from past.builtins import long
-import json
-import os
-import sys
-import time
-import signal
-import logging
-import yaml
-import glob
-import strato.common.log.morelevels
-import socket
-import subprocess
-import re
-import gzip
-import select
-import dateparser
-from future.utils import iteritems
-from datetime import datetime
+import strato.common.log.morelevels  # relies on side effects
 from strato.common.log import lineparse
+from datetime import datetime
+import dateparser
+import argparse
+import logging
+import signal
+import socket
+import select
+import json
+import yaml
+import time
+import glob
+import gzip
+import sys
+import os
+import re
+try:
+    import subprocess32 as subprocess
+except ImportError:
+    import subprocess
 
 
 RED = '\033[31m'
@@ -57,7 +59,8 @@ class Formatter(object):
     converter = time.gmtime
 
     def __init__(self, relativeTime, withThreads, showFullPaths, minimumLevel, microsecondPrecision, noColors,
-                 utc=False, sinceTime=None, untilTime="01/01/2025", elapsedTime=False, shouldPrintKv=False, process=None):
+                 utc=False, sinceTime=None, untilTime="01/01/2025", elapsedTime=False, shouldPrintKv=False,
+                 process=None):
         try:
             self.configFile = yaml.load(open(LOG_CONFIG_FILE_PATH, 'r').read())
             if self.configFile['defaultTimezone'] is not None:
@@ -196,8 +199,8 @@ class Formatter(object):
         caller = self._extract_go_fields(parsed_line, extra_data, 'caller')
         if caller is not None:
             file = caller.get('File', '')
-            line = caller.get('Line','')
-            func_name = caller.get('Name',None)
+            line = caller.get('Line', '')
+            func_name = caller.get('Name', None)
             path = '{}:{} {}'.format(file, line, func_name)
         else:
             path = parsed_line.pop('path', 'no-path')
@@ -226,10 +229,10 @@ class Formatter(object):
             # add key-value fields
             extra_data.update(parsed_line)
             message += '\t'
-            message += ', '.join(['{}={}'.format(k, v) for k, v in iteritems(extra_data) if v != ''])
+            message += ', '.join(['{}={}'.format(k, v) for k, v in extra_data.items() if v != ''])
         # add and colorize the file name
         message = self._add_color(message, GRAY)
-        message  += ' ({})'.format(re.sub(r"^/", "", path))
+        message += ' ({})'.format(re.sub(r"^/", "", path))
         message = self._add_color(message, NORMAL_COLOR)
         return message, time.mktime(ts.timetuple())
 
@@ -275,7 +278,7 @@ class Formatter(object):
         return self._relativeClockFormat % (created - self._firstClock)
 
     def _absoluteClock(self, created):
-        msec = (created - long(created)) * 1000
+        msec = (created - int(created)) * 1000
         return '%s.%.03d' % (time.strftime(TIME_FORMAT, self.converter(created)), msec)
 
 
@@ -312,7 +315,11 @@ def printLog(logFile, formatter, follow, tail):
 
 
 def _addLogName(line, colorCode, logFile, useColors):
-    return "%s %s(%s)%s" % (line, colorCode if useColors else '', os.path.basename(logFile), COLOR_OFF if useColors else '')
+    colorStart = colorCode if useColors else ''
+    colorEnd = COLOR_OFF if useColors else ''
+    filename = os.path.basename(logFile)
+    return "%s %s(%s)%s" % (line, colorStart, filename, colorEnd)
+
 
 def _getNextParsableEntry(inputStream, logFile, colorCode, formatter):
     """
@@ -324,11 +331,15 @@ def _getNextParsableEntry(inputStream, logFile, colorCode, formatter):
         try:
             line = inputStream.next()
             formatted, timestamp = formatter.process(line, logTypeConf)
-            return None if formatted is None else _addLogName(formatted, colorCode, logFile, formatter.useColors), timestamp
+            if formatted is None:
+                return None
+            else:
+                return _addLogName(formatted, colorCode, logFile, formatter.useColors), timestamp
         except StopIteration:
             return None
         except:
             return line, HIGHEST_PRIORITY
+
 
 def _getColorCode(id):
     return MULTY_LOG_COLORS[id % (len(MULTY_LOG_COLORS) - 1)]
@@ -337,8 +348,8 @@ def _getColorCode(id):
 def printLogs(logFiles, formatter, tail):
     inputStreams = [(universalOpen(logFile, 'r', tail=tail), logFile) for logFile in logFiles]
 
-    currentLines= [_getNextParsableEntry(inputStream, logFile, _getColorCode(streamId), formatter)
-                   for streamId, (inputStream, logFile) in enumerate(inputStreams)]
+    currentLines = [_getNextParsableEntry(inputStream, logFile, _getColorCode(streamId), formatter)
+                    for streamId, (inputStream, logFile) in enumerate(inputStreams)]
 
     while any(currentLines):
         _, nextStreamId, formatted = min((line[1], streamId, line[0])
@@ -420,7 +431,7 @@ def runRemotely(host, ignoreArgs):
 
     possibleResolveSuffixes = configFile.get("possibleResolveSuffixes", [])
     hostname = findHostname(host, possibleResolveSuffixes)
-    if hostname == None:
+    if hostname is None:
         print("No reachable host was found for %s" % host)
         return 1
 
@@ -500,12 +511,13 @@ class LogPathFinder:
         for filePath in self.confFile['defaultPaths']:
             self.defaultPaths.extend(glob.glob(filePath))
 
+
 def executeRemotely(args):
-    if args.user != None:
+    if args.user is not None:
         updateConfFile('defaultRemoteUser', args.user)
         ignoreArgs.extend(['-u', '--user', args.user])
 
-    if args.password != None:
+    if args.password is not None:
         updateConfFile('defaultRemotePassword', args.password)
         ignoreArgs.extend(['-p', '--password', args.password])
 
@@ -524,8 +536,8 @@ def copyLogFilesFromRemotes(args):
         try:
             output = subprocess.check_output(command, stderr=subprocess.STDOUT, stdin=open('/dev/null'), close_fds=True)
         except subprocess.CalledProcessError as exc:
-            print("Failed in copying files from remotes. Command : %s\n Return Code : %s\n Exception : %s" % \
-                  (command, exc.returncode, exc.output))
+            parsedError = "Command : %s\n Return Code : %s\n Exception : %s" % (command, exc.returncode, exc.output)
+            print("Failed in copying files from remotes. %s" % parsedError)
             raise
         logFiles = output.splitlines()
     else:
@@ -550,42 +562,50 @@ def minimumLevel(minLevel, noDebug):
                   'progress': logging.PROGRESS,
                   'success': logging.SUCCESS,
                   'step': logging.STEP}
-    for string, level in iteritems(level_dict):
+    for string, level in level_dict.items():
         if string.startswith(minLevel.lower()):
             return level
     return logging.DEBUG
 
 
-if __name__ == "__main__":
-    import argparse
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("logFiles", metavar='logFile', nargs='*', help='logfiles to read')
     parser.add_argument('-d', "--noDebug", action='store_true', help='filter out debug messages')
-    parser.add_argument('-l', '--min-level', action='store', default='', metavar='LEVEL', help='minimal log level to display (substring is OK, case-insensitive)')
+    parser.add_argument('-l', '--min-level', action='store', default='', metavar='LEVEL',
+                        help='minimal log level to display (substring is OK, case-insensitive)')
     parser.add_argument('-r', "--relativeTime", action='store_true', help='print relative time, not absolute')
-    parser.add_argument('-e', "--elapsedTime", action='store_true', help='print elaped time between each log line, not absolute')
+    parser.add_argument('-e', "--elapsedTime", action='store_true',
+                        help='print elaped time between each log line, not absolute')
     parser.add_argument('-C', "--noColors", action='store_true', help='force monochromatic output even on a TTY')
-    parser.add_argument('-L',
-        "--noLess", action="store_true", help='Do not pipe into less even when running in a TTY')
-    parser.add_argument('-m',
-        "--microsecondPrecision", action="store_true",
-        help='print times in microsecond precision (instead of millisecond percision)')
-    parser.add_argument("-P",
-        "--showFullPaths", action='store_true',
-        help='show full path to files instead of just module and function')
+    parser.add_argument('-L', "--noLess", action="store_true",
+                        help='Do not pipe into less even when running in a TTY')
+    parser.add_argument('-m', "--microsecondPrecision", action="store_true",
+                        help='print times in microsecond precision (instead of millisecond percision)')
+    parser.add_argument("-P", "--showFullPaths", action='store_true',
+                        help='show full path to files instead of just module and function')
     parser.add_argument("--withThreads", action="store_true", help='print process and thread name')
-    parser.add_argument("-f", "--follow", action="store_true", help='follow file forever. Force --noLess', default=False)
-    parser.add_argument("-U", "--utc", action="store_true", help='print logs in UTC time (default: localtime)', default=False)
+    parser.add_argument("-f", "--follow", action="store_true", default=False,
+                        help='follow file forever. Force --noLess')
+    parser.add_argument("-U", "--utc", action="store_true", default=False,
+                        help='print logs in UTC time (default: localtime)')
     parser.add_argument("--setLocaltimeOffset", type=int, metavar='HOURS', help='set custom localtime offset in hours')
-    parser.add_argument("-i", "--ignoreExtensions", nargs="+", metavar='EXT', help="list extensions that you don\'t want to read", default=[".gz"])
+    parser.add_argument("-i", "--ignoreExtensions", nargs="+", metavar='EXT', default=[".gz"],
+                        help="list extensions that you don\'t want to read")
     parser.add_argument("-a", "--showAll", action="store_true", help='show all logs', default=False)
-    parser.add_argument("-n", "--node", type=str, help='run strato-log on remote node (possible input is host name or service with DNS resolve', default=None)
-    parser.add_argument("-p", "--password", type=str, help='set default remote password to connect with', default=None)
-    parser.add_argument("-u", "--user", type=str, help='set default remote user to connect with', default=None)
-    parser.add_argument("--restoreLocaltimeOffset", action="store_true", help='restore localtime offset to machine\'s offset')
+    parser.add_argument("-n", "--node", type=str, default=None,
+                        help='run strato-log on remote node (possible input is host name or service with DNS resolve')
+    parser.add_argument("-p", "--password", type=str, default=None,
+                        help='set default remote password to connect with')
+    parser.add_argument("-u", "--user", type=str, default=None,
+                        help='set default remote user to connect with')
+    parser.add_argument("--restoreLocaltimeOffset", action="store_true",
+                        help='restore localtime offset to machine\'s offset')
     parser.add_argument("-t", "--tail", type=int, metavar='n', help='print n last lines only', default=0)
-    parser.add_argument("--since", type=str, metavar='DATE', help='Show entries not older than the specified date (e.g., 1h, 5m, two hours ago, 8/aug/1997)')
-    parser.add_argument("--until", type=str, metavar='DATE', help='Show entries not newer than the specified date (e.g., 0.5h, 4m, one hour ago)', default="01/01/2025")
+    parser.add_argument("--since", type=str, metavar='DATE',
+                        help='Show entries not older than the specified date (e.g., 1h, 5m, two hours ago, 8/aug/1997)')
+    parser.add_argument("--until", type=str, metavar='DATE', default="01/01/2025",
+                        help='Show entries not newer than the specified date (e.g., 0.5h, 4m, one hour ago)')
     parser.add_argument("--all-nodes", action='store_true', help='Bring asked logs from all nodes and open them')
     parser.add_argument("--cached", action='store_true', help='Find logs in /var/log/inspector/strato_log')
     parser.add_argument("-k", "--kv", action='store_true', help='print key-values in log output')
@@ -594,7 +614,7 @@ if __name__ == "__main__":
     args, unknown = parser.parse_known_args()
     ignoreArgs = []
 
-    if select.select([sys.stdin,],[],[],0.0)[0]:
+    if select.select([sys.stdin, ], [], [], 0.0)[0]:
         stdin = True
     else:
         stdin = False
@@ -603,7 +623,7 @@ if __name__ == "__main__":
         print('No input was provided')
         exit(1)
 
-    if args.node != None:
+    if args.node is not None:
         exit(executeRemotely(args))
 
     elif unknown:
@@ -611,10 +631,10 @@ if __name__ == "__main__":
             print("Not a valid argument \"%s\"" % arg)
         exit(1)
 
-    if args.setLocaltimeOffset != None:
+    if args.setLocaltimeOffset is not None:
         updateConfFile('defaultTimezone', args.setLocaltimeOffset)
 
-    if args.restoreLocaltimeOffset == True:
+    if args.restoreLocaltimeOffset is True:
         updateConfFile('defaultTimezone', None)
 
     if args.follow:
@@ -622,8 +642,9 @@ if __name__ == "__main__":
 
     if not args.noLess:
         args = " ".join(["'%s'" % a for a in sys.argv[1:]])
+        lessPipe = "less -r --quit-if-one-screen --RAW-CONTROL-CHARS"
         result = os.system(
-            "python -m strato.common.log.log2text %s --noLess | less -r --quit-if-one-screen --RAW-CONTROL-CHARS" % args)
+            "python -m strato.common.log.log2text %s --noLess | %s" % (args, lessPipe))
         sys.exit(result)
 
     # If in follow mode, print at least 10 lines
@@ -660,3 +681,7 @@ if __name__ == "__main__":
         printLog(logFile=logFiles, formatter=formatter, follow=args.follow, tail=args.tail)
     else:
         printLogs(logFiles=logFiles, formatter=formatter, tail=args.tail)
+
+
+if __name__ == "__main__":
+    main()

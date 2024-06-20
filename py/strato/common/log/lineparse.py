@@ -23,9 +23,9 @@ def seperateTimestamp(message, timestampFormat=DEFAULT_TIMESTAMP_REGEX):
 def translateToEpoch(timeStamp, timestampFormat=DEFAULT_TIMESTAMP_FORMAT):
     ms = 0
     if timestampFormat.endswith('%f'):  # handle milliseconds
-       separator = timestampFormat[-3]
-       if separator in timeStamp:
-          ms = timeStamp.rsplit(separator, 1)[1]
+        separator = timestampFormat[-3]
+        if separator in timeStamp:
+            ms = timeStamp.rsplit(separator, 1)[1]
     timeObject = datetime.datetime.strptime(timeStamp, timestampFormat)
     return calendar.timegm(timeObject.timetuple()) + float(ms)/1000
 

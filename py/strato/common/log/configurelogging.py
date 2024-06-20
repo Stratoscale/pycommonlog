@@ -7,11 +7,15 @@ import os
 import sys
 import atexit
 import json
-import subprocess
 import signal
+try:
+    import subprocess32 as subprocess
+except ImportError:
+    import subprocess
 
 _name = None
 _registered_file_handles = dict()
+
 
 def logFilename(name):
     return '%s/%s%s' % (config.LOGS_DIRECTORY, name, config.LOGS_SUFFIX)
@@ -77,16 +81,21 @@ def changeHandlerLogLevelbyHandlerType(logger, logLevel, handlerType=None):
     [handler.setLevel(logLevel) for handler in logger.handlers if not handlerType or type(handler) == handlerType]
 
 
-def _findCaller():
-    f = sys._getframe(3)
+def _findCallerPyAgnostic(*args, **kwargs):
+    FILE_BLACKLIST = ['logging/__init__.py', 'common/log/morelevels.py', 'configurelogging.py']
+    f = logging.currentframe()
     while hasattr(f, "f_code"):
         co = f.f_code
         filename = os.path.normcase(co.co_filename)
-        if 'logging/__init__.py' in filename or 'common/log/morelevels.py' in filename:
+        if any([blacklisted in filename for blacklisted in FILE_BLACKLIST]):
             f = f.f_back
             continue
-        return (filename, f.f_lineno, co.co_name)
-    return ("(unknown file)", 0, "(unknown function)")
+        if sys.version_info[0] == 2:
+            return (filename, f.f_lineno, co.co_name)
+        return (filename, f.f_lineno, co.co_name, None)
+    if sys.version_info[0] == 2:
+        return ("(unknown file)", 0, "(unknown function)")
+    return ("(unknown file)", 0, "(unknown function)", None)
 
 
 def _useColorsForScreenOutput():
@@ -118,7 +127,7 @@ def _configureOutputToScreen(logger, loggerName):
 
 def _configureOutputToFile(logger, logName):
     if not os.path.isdir(config.LOGS_DIRECTORY):
-        os.makedirs(config.LOGS_DIRECTORY, mode=0777)
+        os.makedirs(config.LOGS_DIRECTORY, mode=0o777)
     handler = logging.FileHandler(filename=logFilename(logName))
     atexit.register(handler.close)
     handler.setFormatter(machinereadableformatter.MachineReadableFormatter())
@@ -128,7 +137,8 @@ def _configureOutputToFile(logger, logName):
     logger.addHandler(handler)
     global _registered_file_handles
     _registered_file_handles[logName] = (logger, handler)
-    logger.findCaller = _findCaller
+    logger.findCaller = _findCallerPyAgnostic
+
 
 def _configureLogLevels(name):
     if config.LOG_CONFIGURATION is not None:
@@ -140,21 +150,23 @@ def _configureLogLevels(name):
         try:
             with open(config.LOGS_CONFIGURATION_OVERRIDE_FILE, 'rt') as f:
                 overrides = json.load(f)
-        except: #pylint: disable=bare-except
+        except:  # pylint: disable=bare-except
             overrides = {}
         default_overrides = overrides.get('default_log_overrides', {})
         dictConfig.update(default_overrides)
         dictConfig.update(overrides.get(name, {}))
     logging.config.dictConfig(dictConfig)
 
+
 def reopenLogginFiles():
     global _registered_file_handles
     save_handles = _registered_file_handles
     _registered_file_handles = dict()
-    for logName, (logger, handler) in save_handles.iteritems():
+    for logName, (logger, handler) in save_handles.items():
         handler.close()
         logger.removeHandler(handler)
         _configureOutputToFile(logger, logName)
+
 
 def reloadLoggingConfiguration():
     reopenLogginFiles()
@@ -162,14 +174,17 @@ def reloadLoggingConfiguration():
     if _name is not None:
         _configureLogLevels(_name)
 
+
 def _handleLoggingConfigurationSignal(signal, stackFrame):
     reloadLoggingConfiguration()
+
 
 def _getMultipleFuncsHandler(funcs):
     def _multipleFuncsHandler(signalNumber, stackFrame):
         for func in funcs:
             func(signalNumber, stackFrame)
     return _multipleFuncsHandler
+
 
 def _configureLoggingSignalHandlers():
     currentHandler = signal.getsignal(config.UPDATE_LOGGING_CONFIGURATION_SIGNAL)

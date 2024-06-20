@@ -1,4 +1,4 @@
-import simplejson
+import json
 
 
 class MachineReadableFormatter:
@@ -9,7 +9,7 @@ class MachineReadableFormatter:
         for attribute in self._IGNORED_ATTRIBUTES:
             if attribute in data:
                 del data[attribute]
-        return simplejson.dumps(data, default=self._defaultSerializer, encoding='raw-unicode-escape')
+        return json.dumps(data, default=self._defaultSerializer, ensure_ascii=False)
 
     def _defaultSerializer(self, obj):
         return str(obj)
