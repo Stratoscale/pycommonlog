@@ -57,7 +57,7 @@ class Formatter(object):
     converter = time.gmtime
 
     def __init__(self, relativeTime, withThreads, showFullPaths, minimumLevel, microsecondPrecision, noColors,
-                 utc=False, sinceTime=None, untilTime="01/01/2025", elapsedTime=False, shouldPrintKv=False, process=None):
+                 utc=False, sinceTime=None, untilTime=None, elapsedTime=False, shouldPrintKv=False, process=None):
         try:
             self.configFile = yaml.load(open(LOG_CONFIG_FILE_PATH, 'r').read())
             if self.configFile['defaultTimezone'] is not None:
@@ -76,7 +76,10 @@ class Formatter(object):
             self._sinceTime = int(time.mktime(dateparser.parse(sinceTime).timetuple()))
         else:
             self._sinceTime = 0
-        self._untilTime = int(time.mktime(dateparser.parse(untilTime).timetuple()))
+        if untilTime:
+            self._untilTime = int(time.mktime(dateparser.parse(untilTime).timetuple()))
+        else:
+            self._untilTime = -1
         self._exceptionLogsFileColorMapping = {}
         self.useColors = not noColors
         if not utc:
@@ -585,7 +588,7 @@ if __name__ == "__main__":
     parser.add_argument("--restoreLocaltimeOffset", action="store_true", help='restore localtime offset to machine\'s offset')
     parser.add_argument("-t", "--tail", type=int, metavar='n', help='print n last lines only', default=0)
     parser.add_argument("--since", type=str, metavar='DATE', help='Show entries not older than the specified date (e.g., 1h, 5m, two hours ago, 8/aug/1997)')
-    parser.add_argument("--until", type=str, metavar='DATE', help='Show entries not newer than the specified date (e.g., 0.5h, 4m, one hour ago)', default="01/01/2025")
+    parser.add_argument("--until", type=str, metavar='DATE', help='Show entries not newer than the specified date (e.g., 0.5h, 4m, one hour ago)', default=None)
     parser.add_argument("--all-nodes", action='store_true', help='Bring asked logs from all nodes and open them')
     parser.add_argument("--cached", action='store_true', help='Find logs in /var/log/inspector/strato_log')
     parser.add_argument("-k", "--kv", action='store_true', help='print key-values in log output')
