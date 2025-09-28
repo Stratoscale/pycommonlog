@@ -109,8 +109,12 @@ def _useColorsForScreenOutput():
 
 
 def _configureOutputToScreen(logger, loggerName):
-    if logger.handlers == []:
+    streamHandlers = [handler for handler in logger.handlers if isinstance(handler, logging.StreamHandler)]
+    if streamHandlers:
+        streamHandler = streamHandlers[0]
+    else:
         streamHandler = logging.StreamHandler()
+    if streamHandler:
         if _useColorsForScreenOutput():
             streamHandler.setFormatter(coloringformatter.ColoringFormatter(
                 '%(created).03f(%(process)d%(threadName)s):%(startColor)s%(levelname)s'
