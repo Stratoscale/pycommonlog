@@ -1,7 +1,37 @@
-all: test check_convention
+.PHONY: all test build test_py2 test_py3 lint_py2 lint_py3
+ARTIFACT=dist/strato_common_log-*-py2.py3-none-any.whl
+PIP_REPOSITORY = http://strato-pypi.dc1.strato:5002/strato/dev
 
-test:
-	PYTHONPATH=$(PWD)/py python py/strato/common/log/tests/test.py
+all: lint test build
 
-check_convention:
-	pep8 py --max-line-length=109
+test: test_py2 test_py3
+
+test_py3:
+	PYTHONPATH=$(PWD)/py python3 py/strato/common/log/tests/test.py
+
+test_py2:
+	PYTHONPATH=$(PWD)/py python2.7 py/strato/common/log/tests/test.py
+
+lint: lint_py2 lint_py3
+
+lint_py3:
+	python3 -m pep8 py --max-line-length=120
+
+lint_py2:
+	python2.7 -m pep8 py --max-line-length=120
+
+build: $(ARTIFACT)
+
+clean:
+	find . -name *.pyc -delete
+	find . -name __pycache__ -delete
+	rm -rf dist */*.egg-info build *.stratolog
+
+$(ARTIFACT):
+	python3 -m build --wheel
+
+upload: $(ARTIFACT)
+
+upload: $(ARTIFACT)
+	twine upload --repository-url $(PIP_REPOSITORY) $<
+
